@@ -1,0 +1,30 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 02665af23c5b841658e62bca642c7035, type: 3}
+  m_Name: MLT_TranslationConfig
+  m_EditorClassIdentifier: 
+  openRouterApiKey: 
+  preferredModel: openai/gpt-5
+  gameContext: "Please translate UI text for a mobile casual puzzle game.\nStyle:
+    concise, friendly, all-ages\nEngine: Unity UI text\nRich Text: Do not translate
+    or change Unity rich text tags (e.g., <b>, <i>, <color=#...>); translate only
+    visible text inside\nConsistency: keep key terms consistent (Start, Settings,
+    Level, Hint, Continue)\nLength: keep short to fit mobile buttons/dialogs\nCulture-neutral:
+    avoid slang, puns, or ambiguous phrasing\nPunctuation/Case: follow target language
+    norms\nPlaceholders: keep {0}, {name}, %d unchanged\nWhitespace/Line breaks:
+    preserve as in source\nNumbers/Units: format per target language unless context
+    requires original\nTone: clear, encouraging, direct\nExamples:\n<b>Level {0}</b>
+    \u2192 translate \u201CLevel\u201D only; keep <b> and {0}\n<color=#FFD700>Great!</color>
+    \u2192 translate \u201CGreat!\u201D only; keep tag and color"
+  targetLanguages: 000000000100000002000000030000000400000005000000060000000700000008000000090000000a0000000b0000000c0000000d0000000e0000000f000000100000001100000012000000130000001400000015000000160000001700000018000000190000001a0000001b0000001c0000001d0000001e0000001f000000200000002100000022000000230000002400000025000000260000002700000028000000290000002a000000
+  apiCallDelay: 1000
+  maxRetries: 3
