@@ -10,6 +10,7 @@ public class BallView : MonoBehaviour
     [SerializeField] private SpriteRenderer bodyRenderer;
     [Tooltip("小球发光 SpriteRenderer，用于选中、移动和完成效果。")]
     [SerializeField] private SpriteRenderer glowRenderer;
+    [SerializeField] private WaterTransferVisual waterTransferVisual;
 
     [Header("Selection Visual")]
     [Tooltip("选中或移动提示时发光的最高透明度。")]
@@ -47,6 +48,11 @@ public class BallView : MonoBehaviour
         if (glowRenderer != null)
         {
             glowRenderer.sortingOrder = bodyOrder - 1;
+        }
+
+        if (waterTransferVisual != null)
+        {
+            waterTransferVisual.SyncSorting();
         }
     }
 
@@ -119,7 +125,7 @@ public class BallView : MonoBehaviour
             if (bodyRenderer != null)
             {
                 bodyRenderer.sprite = entry.sprite != null ? entry.sprite : bodyRenderer.sprite;
-                bodyRenderer.color = Color.white;
+                bodyRenderer.color = entry.tint;
                 defaultBodyColor = bodyRenderer.color;
             }
 
@@ -160,6 +166,40 @@ public class BallView : MonoBehaviour
             glowRenderer.color = glowColor;
             glowRenderer.gameObject.SetActive(false);
         }
+
+        if (waterTransferVisual != null)
+        {
+            waterTransferVisual.RestoreBody();
+        }
+    }
+
+    public void BeginLiftVisual()
+    {
+        KillTweens();
+        if (waterTransferVisual != null)
+        {
+            waterTransferVisual.PlayUp();
+        }
+        else
+        {
+            SetMoveGlow(true);
+        }
+    }
+
+    public Sequence CreateReturnSequence(Vector3 slotPosition, float duration)
+    {
+        transform.DOKill();
+        Sequence sequence = DOTween.Sequence();
+        if (waterTransferVisual != null)
+        {
+            sequence.AppendCallback(() => waterTransferVisual.PlayDown(duration));
+        }
+        sequence.Append(transform.DOMove(slotPosition, duration).SetEase(Ease.InQuad));
+        if (waterTransferVisual != null)
+        {
+            sequence.Append(waterTransferVisual.CreateRevealSequence());
+        }
+        return sequence;
     }
 
     public void SetMoveGlow(bool enabled)
@@ -427,6 +467,10 @@ public class BallView : MonoBehaviour
         }
 
 
+        if (waterTransferVisual != null)
+        {
+            sequence.AppendCallback(() => waterTransferVisual.PlayDown(dropDuration));
+        }
         Tween dropTween = transform.DOMove(targetSlotPosition, dropDuration).SetEase(Ease.InQuad);
         dropTween.OnComplete(() =>
         {
@@ -436,7 +480,14 @@ public class BallView : MonoBehaviour
             }
         });
         sequence.Append(dropTween);
-        AppendLandingBounce(sequence, targetSlotPosition);
+        if (waterTransferVisual != null)
+        {
+            sequence.Append(waterTransferVisual.CreateRevealSequence());
+        }
+        else
+        {
+            AppendLandingBounce(sequence, targetSlotPosition);
+        }
         return sequence;
     }
 

@@ -6,6 +6,7 @@ public class TubeView : MonoBehaviour
 {
     private const int MinimumFrontOverlaySortingOffset = 101;
     private const int TubeBackSortingGap = 2;
+    private const int BallSortingStep = 3;
 
     [Header("Refs")]
     [Tooltip("用于接收点击射线的碰撞体；为空时 Reset/OnValidate 会尝试自动获取。")]
@@ -77,16 +78,23 @@ public class TubeView : MonoBehaviour
     public IReadOnlyList<BallView> RuntimeBallViews => runtimeBallViews;
     public BallColorType LastCompletedColor => lastCompletedColor;
 
-    public int GetSelectedBallSortingOrder(int sortingBoost)
+    public int GetBallSortingOrder(int slotIndex)
+    {
+        return ballSortingOrder + slotIndex * BallSortingStep;
+    }
+
+    public int GetSelectedBallSortingOrder(int sortingBoost, int slotIndex)
     {
         int boostedSortingOrder = ballSortingOrder + sortingBoost;
         FindFrontOverlayRenderer();
         if (frontOverlayRenderer == null)
         {
-            return boostedSortingOrder;
+            return boostedSortingOrder - (Capacity - 1 - slotIndex) * BallSortingStep;
         }
 
-        return Mathf.Min(boostedSortingOrder, GetFrontOverlaySortingOrder() - 1);
+        // 给最上层 Up 留出一层，整组水柱仍在试管前景后面。
+        int topBodyOrder = Mathf.Min(boostedSortingOrder, GetFrontOverlaySortingOrder() - 2);
+        return topBodyOrder - (Capacity - 1 - slotIndex) * BallSortingStep;
     }
 
     private void Awake()
@@ -226,7 +234,7 @@ public class TubeView : MonoBehaviour
             {
                 balls[i].transform.SetParent(BallContainer, true);
                 balls[i].ResetVisuals();
-                balls[i].SetSortingOrder(ballSortingOrder);
+                balls[i].SetSortingOrder(GetBallSortingOrder(i));
             }
         }
     }
@@ -255,7 +263,7 @@ public class TubeView : MonoBehaviour
             if (resetVisuals)
             {
                 ball.ResetVisuals();
-                ball.SetSortingOrder(ballSortingOrder);
+                ball.SetSortingOrder(GetBallSortingOrder(runtimeBallViews.Count));
             }
             runtimeBallViews.Add(ball);
         }

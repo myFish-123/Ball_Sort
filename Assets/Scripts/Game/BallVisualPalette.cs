@@ -12,7 +12,7 @@ public class BallVisualPalette : ScriptableObject
         public BallColorType color = BallColorType.Yellow;
         [Tooltip("该颜色小球使用的主体 Sprite；为空时保留预制体上的默认 Sprite。")]
         public Sprite sprite;
-        [Tooltip("该颜色小球选中/移动时使用的发光颜色。")]
+        [Tooltip("该颜色水柱的主体颜色，同时用于选中/移动时的发光。")]
         public Color tint = Color.white;
     }
 

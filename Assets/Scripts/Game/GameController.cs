@@ -182,6 +182,7 @@ public class GameController : MonoBehaviour
                 continue;
             }
 
+            StopTubeTransition(entry.tubeView);
             entry.tubeView.CollectSlotAnchors();
             entry.tubeView.ResetVisualState();
             entry.tubeView.ClearRuntimeBalls();
@@ -554,7 +555,8 @@ public class GameController : MonoBehaviour
         int topSlotIndex = selection.sourceModel.Count - 1;
         float resolvedLiftHeight = ResolveSelectionLiftHeight(selection.sourceView, topSlotIndex);
 
-        Sequence sequence = DOTween.Sequence();
+        Sequence sequence = DOTween.Sequence().SetTarget(selection.sourceView)
+            .SetLink(selection.sourceView.gameObject);
         for (int i = 0; i < selectedBalls.Count; i++)
         {
             BallView ball = selectedBalls[i];
@@ -563,10 +565,9 @@ public class GameController : MonoBehaviour
                 continue;
             }
 
-            ball.SetMoveGlow(true);
-            ball.SetSortingOrder(selection.sourceView.GetSelectedBallSortingOrder(selectionSortingBoost));
-
+            ball.BeginLiftVisual();
             int slotIndex = selection.sourceModel.Count - 1 - i;
+            ball.SetSortingOrder(selection.sourceView.GetSelectedBallSortingOrder(selectionSortingBoost, slotIndex));
             Vector3 slotPosition = selection.sourceView.GetSlotWorldPosition(slotIndex);
             Vector3 liftedPosition = slotPosition + Vector3.up * resolvedLiftHeight;
             sequence.Insert(0f, ball.AnimateToNoBounce(
@@ -644,7 +645,8 @@ public class GameController : MonoBehaviour
 
         int selectedCount = selection.sourceModel.GetTopRunCount();
         List<BallView> selectedBalls = selection.sourceView.GetTopBallViews(selectedCount);
-        Sequence sequence = DOTween.Sequence();
+        Sequence sequence = DOTween.Sequence().SetTarget(selection.sourceView)
+            .SetLink(selection.sourceView.gameObject);
         for (int i = 0; i < selectedBalls.Count; i++)
         {
             BallView ball = selectedBalls[i];
@@ -653,13 +655,12 @@ public class GameController : MonoBehaviour
                 continue;
             }
 
-            ball.SetSortingOrder(selection.sourceView.BallSortingOrder);
             int slotIndex = selection.sourceModel.Count - 1 - i;
+            ball.SetSortingOrder(selection.sourceView.GetBallSortingOrder(slotIndex));
             Vector3 slotPosition = selection.sourceView.GetSlotWorldPosition(slotIndex);
-            sequence.Insert(0f, ball.AnimateToNoBounce(
+            sequence.Insert(0f, ball.CreateReturnSequence(
                 slotPosition,
-                Mathf.Max(0.01f, selectionTweenDuration),
-                Ease.InQuad));
+                Mathf.Max(0.01f, selectionTweenDuration)));
 
             Tween fadeTween = ball.FadeOutSelectedVisual();
             if (fadeTween != null)
@@ -686,7 +687,7 @@ public class GameController : MonoBehaviour
 
         preparedMove.sourceView.SetSelected(false);
 
-        Sequence batchSequence = DOTween.Sequence();
+        Sequence batchSequence = DOTween.Sequence().SetTarget(this).SetLink(gameObject);
         if (preparedMove.movedBalls.Count > 0)
         {
             for (int i = 0; i < preparedMove.movedBalls.Count; i++)
@@ -716,7 +717,7 @@ public class GameController : MonoBehaviour
                     transferArcHeight);
 
                 float startAt = i * moveStartInterval;
-                int targetSortingOrder = preparedMove.targetView.BallSortingOrder;
+                int targetSortingOrder = preparedMove.targetView.GetBallSortingOrder(preparedMove.targetStartCount + i);
                 batchSequence.Insert(startAt, transferSequence);
                 batchSequence.InsertCallback(
                     startAt + ballRaiseDuration + travelDuration,
@@ -741,15 +742,14 @@ public class GameController : MonoBehaviour
                     continue;
                 }
 
-                ball.SetSortingOrder(preparedMove.sourceView.BallSortingOrder);
                 int slotIndex = GetRuntimeBallSlotIndex(preparedMove.sourceView, ball);
                 if (slotIndex >= 0)
                 {
+                    ball.SetSortingOrder(preparedMove.sourceView.GetBallSortingOrder(slotIndex));
                     Vector3 slotPosition = preparedMove.sourceView.GetSlotWorldPosition(slotIndex);
-                    batchSequence.Insert(0f, ball.AnimateToNoBounce(
+                    batchSequence.Insert(0f, ball.CreateReturnSequence(
                         slotPosition,
-                        Mathf.Max(0.01f, selectionTweenDuration),
-                        Ease.InQuad));
+                        Mathf.Max(0.01f, selectionTweenDuration)));
                 }
 
                 Tween fadeTween = ball.FadeOutSelectedVisual();
@@ -1022,6 +1022,8 @@ public class GameController : MonoBehaviour
         {
             return;
         }
+
+        DOTween.Kill(tubeView);
 
         if (tubeTransitionCoroutines.TryGetValue(tubeView, out Coroutine coroutine) && coroutine != null)
         {
