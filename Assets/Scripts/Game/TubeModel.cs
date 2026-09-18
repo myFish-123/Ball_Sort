@@ -38,6 +38,7 @@ public readonly struct MoveEvaluation
 
 public class TubeModel
 {
+    public const int MaximumHeight = 16;
     private readonly List<BallColorType> balls = new List<BallColorType>();
 
     public TubeModel(string tubeName, int capacity)
@@ -70,7 +71,7 @@ public class TubeModel
 
         if (initialBalls.Count > Capacity)
         {
-            throw new InvalidOperationException($"{TubeName} 的初始球数量超出槽位容量。");
+            throw new InvalidOperationException($"{TubeName} 的初始水柱总高度超出容量。");
         }
 
         for (int i = 0; i < initialBalls.Count; i++)
@@ -148,7 +149,7 @@ public class TubeModel
 
         if (count > balls.Count)
         {
-            throw new InvalidOperationException($"{TubeName} 试图移除超过现有数量的小球。");
+            throw new InvalidOperationException($"{TubeName} 试图移除超过现有高度的水柱。");
         }
 
         balls.RemoveRange(balls.Count - count, count);
@@ -164,7 +165,7 @@ public class TubeModel
 
         if (balls.Count + count > Capacity)
         {
-            throw new InvalidOperationException($"{TubeName} 试图加入超过容量的小球。");
+            throw new InvalidOperationException($"{TubeName} 试图加入超过容量的水柱。");
         }
 
         for (int i = 0; i < count; i++)

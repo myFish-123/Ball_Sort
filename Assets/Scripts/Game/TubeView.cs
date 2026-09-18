@@ -34,6 +34,13 @@ public class TubeView : MonoBehaviour
     [Tooltip("蜡烛下方的火焰特效；为空时会自动查找子物体 fireEff。")]
     [SerializeField] private Transform fireEff;
 
+    [Tooltip("水柱总高度 16 对应的完整内腔范围。")]
+    [SerializeField] private SpriteMask waterInteriorMask;
+
+    private Vector3 waterBottomLocalPosition;
+    private Vector3 bodyBottomOffsetLocal;
+    private float heightUnitLocal;
+
     [Header("Complete Visual")]
     [Tooltip("长管完成后试管本体切换到的颜色。")]
     [SerializeField] private Color completedTint = Color.white;
@@ -73,7 +80,7 @@ public class TubeView : MonoBehaviour
     public Transform SourceWaypointAnchor => sourceWaypointAnchor;
     public Transform TargetWaypointAnchor => targetWaypointAnchor;
     public Transform BallContainer => ballContainer != null ? ballContainer : transform;
-    public int Capacity => slotAnchors.Count;
+    public int Capacity => TubeModel.MaximumHeight;
     public int BallSortingOrder => ballSortingOrder;
     public IReadOnlyList<BallView> RuntimeBallViews => runtimeBallViews;
     public BallColorType LastCompletedColor => lastCompletedColor;
@@ -178,31 +185,29 @@ public class TubeView : MonoBehaviour
         CollectSlotAnchors();
     }
 
-    public Vector3 GetSlotWorldPosition(int index)
+    public bool ConfigureWaterHeightLayout()
     {
-        if (slotAnchors.Count == 0)
-        {
-            return transform.position;
-        }
-
-        index = Mathf.Clamp(index, 0, slotAnchors.Count - 1);
-        return slotAnchors[index].position;
+        if (waterInteriorMask == null || waterInteriorMask.sprite == null) return false;
+        Bounds bounds = waterInteriorMask.sprite.bounds;
+        Vector3 bottom = waterInteriorMask.transform.TransformPoint(
+            new Vector3(bounds.center.x, bounds.min.y, bounds.center.z));
+        Vector3 top = waterInteriorMask.transform.TransformPoint(
+            new Vector3(bounds.center.x, bounds.max.y, bounds.center.z));
+        waterBottomLocalPosition = transform.InverseTransformPoint(bottom);
+        heightUnitLocal = Vector3.Distance(transform.InverseTransformPoint(top), waterBottomLocalPosition) / Capacity;
+        return heightUnitLocal > 0f;
     }
 
-    public float GetSlotSpacing()
+    public void InitializeWaterBall(BallView ball)
     {
-        if (slotAnchors.Count < 2)
-        {
-            return 0.5f;
-        }
+        ball.SetHeightUnitWorld(heightUnitLocal * Mathf.Abs(transform.lossyScale.y));
+        bodyBottomOffsetLocal = transform.InverseTransformVector(ball.BodyBottomWorldOffset);
+    }
 
-        float totalSpacing = 0f;
-        for (int i = 1; i < slotAnchors.Count; i++)
-        {
-            totalSpacing += Vector3.Distance(slotAnchors[i - 1].position, slotAnchors[i].position);
-        }
-
-        return totalSpacing / (slotAnchors.Count - 1);
+    public Vector3 GetSlotWorldPosition(int heightBelow)
+    {
+        return transform.TransformPoint(waterBottomLocalPosition
+            + Vector3.up * heightBelow * heightUnitLocal - bodyBottomOffsetLocal);
     }
 
     public List<BallView> GetTopBallViews(int count)
@@ -260,6 +265,7 @@ public class TubeView : MonoBehaviour
             }
 
             ball.transform.SetParent(BallContainer, true);
+            InitializeWaterBall(ball);
             if (resetVisuals)
             {
                 ball.ResetVisuals();
@@ -296,7 +302,7 @@ public class TubeView : MonoBehaviour
 
     public void SnapRuntimeBallsToSlots()
     {
-        int ballCount = Mathf.Min(runtimeBallViews.Count, slotAnchors.Count);
+        int ballCount = runtimeBallViews.Count;
         for (int i = 0; i < ballCount; i++)
         {
             runtimeBallViews[i].SnapTo(GetSlotWorldPosition(i));
@@ -312,11 +318,6 @@ public class TubeView : MonoBehaviour
             end++;
         }
         return end - startIndex;
-    }
-
-    public float GetColumnExtraHeight(int startIndex, int length)
-    {
-        return Vector3.Distance(GetSlotWorldPosition(startIndex), GetSlotWorldPosition(startIndex + length - 1));
     }
 
     public void RefreshWaterColumns()
@@ -336,7 +337,7 @@ public class TubeView : MonoBehaviour
                 ball.SetSortingOrder(GetBallSortingOrder(i));
                 if (i == start)
                 {
-                    ball.ShowWaterColumn(GetColumnExtraHeight(start, length));
+                    ball.ShowWaterColumn(length);
                 }
                 else
                 {

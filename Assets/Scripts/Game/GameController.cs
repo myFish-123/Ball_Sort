@@ -11,8 +11,8 @@ public class GameController : MonoBehaviour
     public class WaterColumnEntry
     {
         public BallColorType color = BallColorType.Yellow;
-        [Tooltip("占用的整数格数，1 格对应一个槽位。")]
-        [Min(1)] public int length = 1;
+        [Tooltip("上下截面中线之间的有效高度；Body 额外延伸半个截面用于覆盖，每管总高度不能超过 16。")]
+        [Min(1)] public int length = 2;
     }
 
     [Serializable]
@@ -30,11 +30,11 @@ public class GameController : MonoBehaviour
             {
                 if (column == null || column.color == BallColorType.None || column.length < 1)
                 {
-                    throw new InvalidOperationException("水柱必须配置有效颜色，长度必须是正整数。");
+                    throw new InvalidOperationException("水柱必须配置有效颜色，高度必须是正整数。");
                 }
                 if (column.length > capacity - result.Count)
                 {
-                    throw new InvalidOperationException($"水柱总长度不能超过试管容量 {capacity}。");
+                    throw new InvalidOperationException($"水柱总高度不能超过试管容量 {capacity}。");
                 }
                 for (int i = 0; i < column.length; i++)
                 {
@@ -215,9 +215,9 @@ public class GameController : MonoBehaviour
             entry.tubeView.ResetVisualState();
             entry.tubeView.ClearRuntimeBalls();
 
-            if (entry.tubeView.Capacity <= 0)
+            if (!entry.tubeView.ConfigureWaterHeightLayout())
             {
-                Debug.LogError($"{entry.tubeView.name} 没有配置任何槽位物体。", entry.tubeView);
+                Debug.LogError($"{entry.tubeView.name} 没有配置内腔遮罩，无法计算水柱高度。", entry.tubeView);
                 continue;
             }
 
@@ -242,6 +242,7 @@ public class GameController : MonoBehaviour
                 BallView ballView = Instantiate(ballPrefab, entry.tubeView.BallContainer);
                 ballView.name = $"{model.Balls[ballIndex]}_{ballIndex}";
                 ballView.Initialize(model.Balls[ballIndex], ballVisualPalette);
+                entry.tubeView.InitializeWaterBall(ballView);
                 Vector3 slotPosition = entry.tubeView.GetSlotWorldPosition(ballIndex);
                 ballView.SnapTo(shouldPlayIntroDrop
                     ? GetIntroDropStartPosition(entry.tubeView, slotPosition)
@@ -324,7 +325,7 @@ public class GameController : MonoBehaviour
             Vector3 startPosition = GetIntroDropStartPosition(dropBall.tubeView, dropBall.slotPosition);
             float startAt = columnIndex * columnStartInterval + sameColumnIndex * sameColumnInterval;
             ball.SnapTo(startPosition);
-            ball.ShowWaterColumn(dropBall.tubeView.GetColumnExtraHeight(dropBall.ballIndex, dropBall.length));
+            ball.ShowWaterColumn(dropBall.length);
             ball.gameObject.SetActive(false);
 
             dropSequence.InsertCallback(startAt, () =>
@@ -334,11 +335,11 @@ public class GameController : MonoBehaviour
                     ball.gameObject.SetActive(true);
                 }
             });
-            dropSequence.Insert(
-                startAt,
-                ball.CreateDropSequence(
-                    dropBall.slotPosition,
-                    Mathf.Max(0.01f, introDropDuration)));
+            Sequence columnDrop = ball.CreateDropSequence(
+                dropBall.slotPosition, Mathf.Max(0.01f, introDropDuration));
+            BindLandingSurfaceColor(columnDrop, dropBall.tubeView, dropBall.ballIndex, ball,
+                0f, Mathf.Max(0.01f, introDropDuration));
+            dropSequence.Insert(startAt, columnDrop);
 
             if (!string.IsNullOrEmpty(introDropSfxName)
                 && visibleDropIndex % sfxBallInterval == 0
@@ -723,8 +724,7 @@ public class GameController : MonoBehaviour
         }
 
         int targetBottomSlot = preparedMove.targetStartCount;
-        movingColumn.SetWaterColumnHeight(preparedMove.targetView.GetColumnExtraHeight(
-            targetBottomSlot, preparedMove.movedBalls.Count));
+        movingColumn.SetWaterColumnHeight(preparedMove.movedBalls.Count);
         Vector3 targetSlotPosition = preparedMove.targetView.GetSlotWorldPosition(targetBottomSlot);
         Vector3 sourceExitPosition = new Vector3(
             liftedPosition.x,
@@ -735,9 +735,12 @@ public class GameController : MonoBehaviour
             preparedMove.targetView.TubeMouthAnchor.position.y + transferHoverHeight,
             targetSlotPosition.z);
 
-        batchSequence.Insert(0f, movingColumn.CreateTransferSequence(
+        Sequence transfer = movingColumn.CreateTransferSequence(
             sourceExitPosition, targetHoverPosition, targetSlotPosition,
-            raiseDuration, travelDuration, dropDuration, transferArcHeight));
+            raiseDuration, travelDuration, dropDuration, transferArcHeight);
+        BindLandingSurfaceColor(transfer, preparedMove.targetView, targetBottomSlot,
+            movingColumn, Mathf.Max(0f, raiseDuration) + Mathf.Max(0f, travelDuration), dropDuration);
+        batchSequence.Insert(0f, transfer);
         batchSequence.InsertCallback(Mathf.Max(0f, raiseDuration) + Mathf.Max(0f, travelDuration), () =>
         {
             movingColumn.FadeOutSelectedVisual();
@@ -838,12 +841,42 @@ public class GameController : MonoBehaviour
         }
 
         BallView column = balls[0];
-        column.SetWaterColumnHeight(tubeView.GetColumnExtraHeight(bottomSlotIndex, balls.Count));
+        column.SetWaterColumnHeight(balls.Count);
         column.SetSortingOrder(tubeView.GetBallSortingOrder(bottomSlotIndex));
         column.FadeOutSelectedVisual();
-        return column.CreateDropSequence(
+        Sequence drop = column.CreateDropSequence(
             tubeView.GetSlotWorldPosition(bottomSlotIndex),
             Mathf.Max(0.01f, selectionTweenDuration));
+        BindLandingSurfaceColor(drop, tubeView, bottomSlotIndex, column,
+            0f, Mathf.Max(0.01f, selectionTweenDuration));
+        return drop;
+    }
+
+    private void BindLandingSurfaceColor(Sequence sequence, TubeView tube,
+        int bottomSlotIndex, BallView incoming, float dropStartTime, float fallDuration)
+    {
+        if (bottomSlotIndex <= 0) return;
+        var balls = tube.RuntimeBallViews;
+        int below = bottomSlotIndex - 1;
+        BallColorType color = balls[below].ColorType;
+        while (below > 0 && balls[below - 1].ColorType == color) below--;
+        WaterBodyTopAnchor receivingSurface = balls[below].BodyTopAnchor;
+        WaterBodyTopAnchor incomingSurface = incoming.BodyTopAnchor;
+        if (receivingSurface == null || incomingSurface == null) return;
+
+        // InQuad distance is time squared; trigger after 70% of the fall distance.
+        float colorChangeTime = dropStartTime + Mathf.Max(0f, fallDuration) * Mathf.Sqrt(0.7f);
+        sequence.InsertCallback(colorChangeTime, () =>
+        {
+            if (receivingSurface != null) receivingSurface.SetIncomingColor(incomingSurface);
+        });
+        // Restore after the reveal, and also when a transition is interrupted.
+        TweenCallback restore = () =>
+        {
+            if (receivingSurface != null) receivingSurface.ClearIncomingColor(incomingSurface);
+        };
+        sequence.OnComplete(restore);
+        sequence.OnKill(restore);
     }
 
     private SelectionState CreateSelection(TubeView sourceView, TubeModel sourceModel)

@@ -1,3 +1,202 @@
+## 2026-09-18 修正杯身、水柱和杯口渲染顺序
+
+**原因**
+杯身和杯口位于 tube 排序层，水柱预制体位于 Default 层，跨层优先级导致杯身遮住水柱。
+
+**修改**
+- 通过 Unity 原生 Prefab API 将水柱预制体内 Body、Up、发光及下落/抬起特效的 SpriteRenderer 统一到 tube 层。
+- 保留原有 Order：杯身 -2，水柱按高度递增，杯口 101；不增加运行时排序逻辑。
+
+**主要文件**
+- `Assets/prefabs/Water/body.prefab`
+
+**Unity 编辑器操作**
+已由 Unity 保存预制体，重新运行游戏生效。
+
+**注意**
+原生编辑器保存后复查 5 个水柱渲染器均为 tube 层；六根杯子均满足杯身 < 水柱（含 Up）< 杯口。一次性脚本已移除。未提交 Git。
+
+## 2026-09-18 试管高度上限改为 16
+
+**原因**
+用户将每管总高度限制调整为 16。
+
+**修改**
+- MaximumHeight 从 13 改为 16，配置校验、剩余容量、满管判定和内腔高度换算统一使用新上限。
+- 同步 Inspector 提示，保留现有各段 Length。
+
+**主要文件**
+- `Assets/Scripts/Game/TubeModel.cs`
+- `Assets/Scripts/Game/TubeView.cs`
+- `Assets/Scripts/Game/GameController.cs`
+
+**Unity 编辑器操作**
+重新运行游戏。
+
+**注意**
+内腔尺寸不变，现有高度换算会将总高度 16 映射到整管，因此相同 Length 的显示高度会比原来小。已检查容量引用和差异格式；未提交 Git。
+
+## 2026-09-18 下落 70% 路程时换色
+
+**原因**
+用户要求提前到下落路程的 70% 改变承接水柱 Up 颜色。
+
+**修改**
+- 按 InQuad 缓动换算触发时间为下落时长乘以 √0.7，适用于所有下落入口。
+
+**主要文件**
+- `Assets/Scripts/Game/GameController.cs`
+
+**Unity 编辑器操作**
+刷新脚本并重新运行。
+
+**注意**
+已检查缓动换算：时间比例约 83.67% 对应路程 70%。未提交 Git。
+
+## 2026-09-18 遮住水柱弧边并延后落点换色
+
+**原因**
+Up 与 Body 的圆弧素材不完全一致，仅对齐边界仍会露边；从开始下落就改变承接截面颜色过早。
+
+**修改**
+- Up 默认偏移改为 -0.10，新增 Seam Overlap 默认 0.04 世界单位，让 Body 越过截面底边，补足圆弧边缘覆盖；有效高度和容量不变。
+- 所有下落入口的换色统一推迟到下落时长的 95%，对应 InQuad 下约 90% 的路程，保留展开完毕及中断恢复颜色的处理。
+
+**主要文件**
+- `Assets/Scripts/Game/WaterBodyTopAnchor.cs`
+- `Assets/Scripts/Game/GameController.cs`
+
+**Unity 编辑器操作**
+刷新并重新运行。Body 的 WaterBodyTopAnchor 可调整 Up Vertical Offset 和 Seam Overlap；如保存过偏移覆盖值，手动将其设为 -0.10。
+
+**注意**
+C# 编译通过；实际贴图边缘效果尚未在 Unity 中验证。未提交 Git。
+
+## 2026-09-18 加深边缘覆盖及下落期间截面换色
+
+**原因**
+水柱交界仍有细边；下落阶段露出的承接截面需要与来水颜色一致。
+
+**修改**
+- Up 默认偏移从 -0.06 调整为 -0.08 世界单位，Body 覆盖深度同步增加。
+- 开局下落、跨管转移和选中放回期间，将下方实际可见水柱的 Up 临时设为来水的提亮颜色。
+- 颜色覆盖由 WaterBodyTopAnchor 统一应用，避免 LateUpdate 覆盖；水柱展开结束或动画被取消时恢复，下落颜色不修改 Body 和关卡数据。
+
+**主要文件**
+- `Assets/Scripts/Game/WaterBodyTopAnchor.cs`
+- `Assets/Scripts/Game/BallView.cs`
+- `Assets/Scripts/Game/GameController.cs`
+
+**Unity 编辑器操作**
+刷新脚本并重新运行；若自行保存过 Up Vertical Offset 的覆盖值，可改为 -0.08。
+
+**注意**
+使用 Unity 与项目程序集完成 C# 编译检查；尚未实际运行验证最终颜色过渡与边缘外观。未提交 Git。
+
+## 2026-09-18 水柱覆盖深度同步 Up 偏移
+
+**原因**
+Up 下移后，上一段 Body 仍只覆盖半个截面，下移的部分露出一圈颜色。
+
+**修改**
+- 覆盖深度统一为“半截面高度减去 Up 垂直偏移”；默认下移 0.06 时，Body 向下额外覆盖 0.06。
+- Body 绘制高度、底部定位及展开动画统一读取此深度，保留 Length 和累计堆叠高度。
+
+**主要文件**
+- `Assets/Scripts/Game/BallView.cs`
+- `Assets/Scripts/Game/WaterBodyTopAnchor.cs`
+
+**Unity 编辑器操作**
+刷新脚本并重新运行游戏。后续调整 Up Vertical Offset 时，覆盖深度同步变化。
+
+**注意**
+C# 编译及覆盖边界计算检查通过；尚未在 Unity 镜头下验证最终贴图接缝。未提交 Git。
+
+## 2026-09-18 下移 Up 遮住素材接缝
+
+**原因**
+Body 顶部素材留白使 Up 按截面中线对齐后仍出现细缝，直接调整 Transform 会被顶部跟随脚本覆盖。
+
+**修改**
+- WaterBodyTopAnchor 增加 Up Vertical Offset，默认向下 0.06 世界单位，可在 Inspector 微调。
+- 偏移只影响 Up 贴图位置，保留有效高度、半截面覆盖量、容量与裁剪边界。
+
+**主要文件**
+- `Assets/Scripts/Game/WaterBodyTopAnchor.cs`
+
+**Unity 编辑器操作**
+刷新脚本即可应用默认偏移；可在 Body 的 WaterBodyTopAnchor 组件中调整 Up Vertical Offset，负值越大越向下。
+
+**注意**
+C# 编译通过；最终接缝效果需要在当前镜头下查看。未提交 Git。
+
+## 2026-09-18 水柱按截面中线衔接
+
+**原因**
+以完整 Sprite 外框堆叠会把圆弧底部也算入有效高度，相邻水柱的截面之间出现空隙。
+
+**修改**
+- Length 改为上下截面中线之间的有效高度，Body 向下额外延伸半个 Up 截面用于覆盖，不扣减累计堆叠高度。
+- Up 中心跟随 Body 顶部，移除固定的世界偏移；展开动画的表面位置与裁剪平面使用同一截面边界。
+- 重叠量由 Up 当前尺寸计算；2+2 与 4 保持相同有效高度，每管容量仍为 13。
+
+**主要文件**
+- `Assets/Scripts/Game/BallView.cs`
+- `Assets/Scripts/Game/WaterBodyTopAnchor.cs`
+- `Assets/Scripts/Game/GameController.cs`
+
+**Unity 编辑器操作**
+刷新脚本后重新运行游戏。
+
+**注意**
+Body 的 SpriteRenderer Size Y 现在包含半截面的绘制延伸，因此略大于配置 Length；关卡容量只计算 Length。C# 编译通过；Unity 实际验证六根管的 2+2 与 4 顶部中线齐平、半截面覆盖量、上下显示层级及展开中点全部通过；一次性验证脚本已删除。未提交 Git。
+
+## 2026-09-18 水柱 Length 改为实际高度
+
+**原因**
+旧 Length 使用原始 Body 高度加槽位间距换算，数值 3 与 2 的视觉比例不直观。
+
+**修改**
+- Length 保留正整数，直接对应 Body SpriteRenderer Size Y，默认 2；每管总高度上限 13。
+- 按累计高度堆叠，以内腔遮罩高度确定统一显示比例，取消旧槽位间距换算。
+- 开局、移动和余量返回统一使用实际高度；main 场景 21 个条目设为 2，六根管绑定内腔遮罩，Body 预制体 Size Y 设为 2。
+
+**主要文件**
+- `Assets/Scripts/Game/GameController.cs`
+- `Assets/Scripts/Game/TubeModel.cs`
+- `Assets/Scripts/Game/TubeView.cs`
+- `Assets/Scripts/Game/BallView.cs`
+- `Assets/Scenes/main.unity`
+- `Assets/prefabs/Water/body.prefab`
+
+**Unity 编辑器操作**
+已通过 Ball_Sort 编辑器原生 API 保存配置，一次性脚本已删除。重新运行游戏生效。
+
+**注意**
+实际 Unity 验证六管中高度 3/2 比例为 1.5、累计堆叠和高度 13 贴合内腔；C# 编译及模型测试通过（13 允许、14 拒绝、部分转移守恒）。尚未完整游玩验证动画。保留原满管同色通关规则，当前默认水量不足以满足原通关要求；未提交 Git。
+
+## 2026-09-18 收紧 Body 底部透明范围
+
+**原因**
+Body 图片底部有 53 像素透明留白，完整 Sprite 的选中范围因此延伸到可见水柱下方。
+
+**修改**
+- 通过 Unity 原生编辑器脚本裁掉纯透明底边，图片从 85×732 改为 85×679；保留的像素逐像素不变。
+- 使用 TextureImporter 保存 Bottom Center 支点及九宫格底边 113→60，保留 GUID 和 Sprite fileID。
+- Body 的 Size Y 从 2.5 改为 1.97，本地 Y 上移 0.2901059，保持可见底部、顶部及各整数长度的形状位置。
+- 临时编辑器脚本已移除，备份保存在 `/tmp/BallSort-body-trim-backup`。
+
+**主要文件**
+- `Assets/prefabs/Water/body.png`
+- `Assets/prefabs/Water/body.png.meta`（由 Unity 导入器保存）
+- `Assets/prefabs/Water/body.prefab`
+
+**Unity 编辑器操作**
+已在 Ball_Sort 编辑器执行并保存；退出后重新运行游戏即可让新实例使用修正后的预制体。
+
+**注意**
+Unity 实际执行成功；像素一致性、资源标识及长度 1/2/4/7 的顶部位置检查通过。未提交 Git。
+
 ## 2026-09-18 修复 SpriteMask 导致编辑器启动崩溃
 
 **原因**

@@ -608,8 +608,8 @@ Transform:
   m_GameObject: {fileID: 155111138}
   serializedVersion: 2
   m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
-  m_LocalPosition: {x: 0.005, y: 0.35, z: -198.45825}
-  m_LocalScale: {x: 1, y: 1, z: 1}
+  m_LocalPosition: {x: 0.005, y: 0.3671, z: -198.45825}
+  m_LocalScale: {x: 1, y: 0.9923, z: 1}
   m_ConstrainProportionsScale: 0
   m_Children: []
   m_Father: {fileID: 803077018}
@@ -997,8 +997,8 @@ Transform:
   m_GameObject: {fileID: 246132595}
   serializedVersion: 2
   m_LocalRotation: {x: -0, y: -0, z: -0, w: 1}
-  m_LocalPosition: {x: 0.0163, y: 0.336, z: -198.45825}
-  m_LocalScale: {x: 1, y: 1, z: 1}
+  m_LocalPosition: {x: 0.0163, y: 0.3722, z: -198.45825}
+  m_LocalScale: {x: 1, y: 0.9923, z: 1}
   m_ConstrainProportionsScale: 0
   m_Children: []
   m_Father: {fileID: 3000000005}
@@ -1224,55 +1224,55 @@ MonoBehaviour:
   - tubeView: {fileID: 974081974}
     columns:
     - color: 3
-      length: 1
-    - color: 6
+      length: 6
+    - color: 4
       length: 2
     - color: 3
-      length: 2
-    - color: 2
+      length: 6
+    - color: 4
       length: 2
   - tubeView: {fileID: 607252730}
     columns:
     - color: 1
       length: 2
     - color: 3
+      length: 4
+    - color: 2
       length: 2
     - color: 1
-      length: 1
-    - color: 2
+      length: 6
+    - color: 4
       length: 2
   - tubeView: {fileID: 825417732}
     columns:
-    - color: 1
-      length: 1
-    - color: 3
-      length: 1
-    - color: 2
+    - color: 4
       length: 2
-    - color: 3
-      length: 1
     - color: 1
+      length: 6
+    - color: 2
+      length: 6
+    - color: 6
       length: 2
   - tubeView: {fileID: 343433277}
     columns:
-    - color: 6
-      length: 2
     - color: 2
+      length: 6
+    - color: 1
       length: 2
     - color: 6
+      length: 6
+    - color: 4
       length: 2
-    - color: 2
-      length: 1
   - tubeView: {fileID: 3000000022}
     columns:
     - color: 6
-      length: 1
-    - color: 1
+      length: 8
+    - color: 4
       length: 2
     - color: 2
       length: 2
-    - color: 1
-      length: 2
+    - color: 4
+      length: 4
   - tubeView: {fileID: 3000000062}
     columns: []
   requiredCompletedTubeCount: 5
@@ -1479,6 +1479,7 @@ MonoBehaviour:
   frontOverlayRenderer: {fileID: 1744010808}
   lazhu: {fileID: 443660944}
   fireEff: {fileID: 1906716641}
+  waterInteriorMask: {fileID: 412349086}
   completedTint: {r: 1, g: 1, b: 1, a: 1}
   ballSortingOrder: 0
   frontOverlaySortingOffset: 1
@@ -1581,7 +1582,7 @@ Transform:
   serializedVersion: 2
   m_LocalRotation: {x: -0, y: -0, z: -0, w: 1}
   m_LocalPosition: {x: 0.007, y: 0.357, z: -198.45825}
-  m_LocalScale: {x: 1, y: 1, z: 1}
+  m_LocalScale: {x: 1, y: 0.9923, z: 1}
   m_ConstrainProportionsScale: 0
   m_Children: []
   m_Father: {fileID: 1392192274}
@@ -2688,6 +2689,7 @@ MonoBehaviour:
   frontOverlayRenderer: {fileID: 1548221398}
   lazhu: {fileID: 1803038400}
   fireEff: {fileID: 159830520}
+  waterInteriorMask: {fileID: 1513956067}
   completedTint: {r: 1, g: 1, b: 1, a: 1}
   ballSortingOrder: 0
   frontOverlaySortingOffset: 1
@@ -3278,6 +3280,7 @@ MonoBehaviour:
   frontOverlayRenderer: {fileID: 54698877}
   lazhu: {fileID: 522745342}
   fireEff: {fileID: 648869666}
+  waterInteriorMask: {fileID: 1271930333}
   completedTint: {r: 1, g: 1, b: 1, a: 1}
   ballSortingOrder: 0
   frontOverlaySortingOffset: 1
@@ -3340,7 +3343,7 @@ MonoBehaviour:
   streamMaterial: {fileID: 2100000, guid: 17af35473e1042aa8d92992f47d3e5f9, type: 2}
   streamColor: {r: 0.15, g: 0.7, b: 1, a: 1}
   streamWidth: 0.2
-  emissionDuration: 2.37
+  emissionDuration: 2.2
   moveDuration: 0.65
   sortingOrder: 50
   pathType: 1
@@ -3810,6 +3813,7 @@ MonoBehaviour:
   frontOverlayRenderer: {fileID: 1284246184}
   lazhu: {fileID: 76534890}
   fireEff: {fileID: 40704911}
+  waterInteriorMask: {fileID: 155111140}
   completedTint: {r: 1, g: 1, b: 1, a: 1}
   ballSortingOrder: 0
   frontOverlaySortingOffset: 1
@@ -5578,8 +5582,8 @@ Transform:
   m_GameObject: {fileID: 1271930331}
   serializedVersion: 2
   m_LocalRotation: {x: -0, y: -0, z: -0, w: 1}
-  m_LocalPosition: {x: 0.0157, y: 0.339, z: -198.45825}
-  m_LocalScale: {x: 1, y: 1, z: 1}
+  m_LocalPosition: {x: 0.0157, y: 0.3657, z: -198.45825}
+  m_LocalScale: {x: 1, y: 0.9923, z: 1}
   m_ConstrainProportionsScale: 0
   m_Children: []
   m_Father: {fileID: 125976618}
@@ -6898,8 +6902,8 @@ Transform:
   m_GameObject: {fileID: 1513956065}
   serializedVersion: 2
   m_LocalRotation: {x: -0, y: -0, z: -0, w: 1}
-  m_LocalPosition: {x: 0.008, y: 0.34, z: -198.45825}
-  m_LocalScale: {x: 1, y: 1, z: 1}
+  m_LocalPosition: {x: 0.008, y: 0.3628, z: -198.45825}
+  m_LocalScale: {x: 1, y: 0.9923, z: 1}
   m_ConstrainProportionsScale: 0
   m_Children: []
   m_Father: {fileID: 1525217407}
@@ -8151,8 +8155,8 @@ Transform:
   m_GameObject: {fileID: 1965853210}
   serializedVersion: 2
   m_LocalRotation: {x: -0, y: -0, z: -0, w: 1}
-  m_LocalPosition: {x: 0.01, y: 0.345, z: -198.45825}
-  m_LocalScale: {x: 1, y: 1, z: 1}
+  m_LocalPosition: {x: 0.01, y: 0.3702, z: -198.45825}
+  m_LocalScale: {x: 1, y: 0.9923, z: 1}
   m_ConstrainProportionsScale: 0
   m_Children: []
   m_Father: {fileID: 3000000088}
@@ -8885,6 +8889,7 @@ MonoBehaviour:
   frontOverlayRenderer: {fileID: 3000000003}
   lazhu: {fileID: 1499914199}
   fireEff: {fileID: 428334595}
+  waterInteriorMask: {fileID: 246132597}
   completedTint: {r: 1, g: 1, b: 1, a: 1}
   ballSortingOrder: 0
   frontOverlaySortingOffset: 1
@@ -9223,6 +9228,7 @@ MonoBehaviour:
   frontOverlayRenderer: {fileID: 3000000098}
   lazhu: {fileID: 1090958412}
   fireEff: {fileID: 1807255461}
+  waterInteriorMask: {fileID: 1965853212}
   completedTint: {r: 1, g: 1, b: 1, a: 1}
   ballSortingOrder: 0
   frontOverlaySortingOffset: 1

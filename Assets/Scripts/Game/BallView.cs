@@ -35,9 +35,11 @@ public class BallView : MonoBehaviour
     private Vector3 defaultGlowScale = Vector3.one;
     private Color defaultBodyColor = Color.white;
     private Vector2 defaultBodySize;
+    private WaterBodyTopAnchor bodyTopAnchor;
     private Color defaultGlowColor = Color.white;
 
     public BallColorType ColorType { get; private set; }
+    public WaterBodyTopAnchor BodyTopAnchor => bodyTopAnchor;
 
     public void SetSortingOrder(int bodyOrder)
     {
@@ -108,6 +110,7 @@ public class BallView : MonoBehaviour
         {
             defaultBodyColor = bodyRenderer.color;
             defaultBodySize = bodyRenderer.size;
+            bodyTopAnchor = bodyRenderer.GetComponent<WaterBodyTopAnchor>();
         }
 
         if (glowRenderer != null)
@@ -207,17 +210,39 @@ public class BallView : MonoBehaviour
         }
     }
 
-    public void ShowWaterColumn(float extraWorldHeight)
+    private float BottomOverlapWorld => bodyTopAnchor != null
+        ? bodyTopAnchor.BottomOverlapWorld : 0f;
+
+    public Vector3 BodyBottomWorldOffset
     {
-        ResetVisuals();
-        SetWaterColumnHeight(extraWorldHeight);
+        get
+        {
+            Bounds bounds = bodyRenderer.localBounds;
+            return bodyRenderer.transform.TransformPoint(
+                new Vector3(bounds.center.x, bounds.min.y, bounds.center.z)) + bodyRenderer.transform.up * BottomOverlapWorld - transform.position;
+        }
     }
 
-    public void SetWaterColumnHeight(float extraWorldHeight)
+    public void SetHeightUnitWorld(float worldHeightPerUnit)
+    {
+        Vector3 scale = bodyRenderer.transform.localScale;
+        scale.y = worldHeightPerUnit / Mathf.Abs(bodyRenderer.transform.parent.lossyScale.y);
+        bodyRenderer.transform.localScale = scale;
+    }
+
+    public void ShowWaterColumn(float height)
+    {
+        ResetVisuals();
+        SetWaterColumnHeight(height);
+    }
+
+    public void SetWaterColumnHeight(float height)
     {
         Vector2 size = defaultBodySize;
-        size.y += extraWorldHeight / Mathf.Abs(bodyRenderer.transform.lossyScale.y);
+        // Keep effective height unchanged while covering the lowered section of the column below.
+        size.y = height + BottomOverlapWorld / Mathf.Abs(bodyRenderer.transform.lossyScale.y);
         bodyRenderer.size = size;
+        if (bodyTopAnchor != null) bodyTopAnchor.SetRevealProgress(1f);
     }
 
     public Sequence CreateDropSequence(Vector3 slotPosition, float duration)
