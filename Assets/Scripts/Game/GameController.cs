@@ -8,12 +8,41 @@ using UnityEngine.Events;
 public class GameController : MonoBehaviour
 {
     [Serializable]
+    public class WaterColumnEntry
+    {
+        public BallColorType color = BallColorType.Yellow;
+        [Tooltip("占用的整数格数，1 格对应一个槽位。")]
+        [Min(1)] public int length = 1;
+    }
+
+    [Serializable]
     public class TubeLevelEntry
     {
         [Tooltip("本关中对应的试管视图对象。")]
         public TubeView tubeView;
-        [Tooltip("试管初始小球颜色列表，顺序为从底部到顶部。")]
-        public List<BallColorType> balls = new List<BallColorType>();
+        [Tooltip("从底部到顶部配置颜色和长度，总长度不能超过试管容量；空管不添加条目。")]
+        public List<WaterColumnEntry> columns = new List<WaterColumnEntry>();
+
+        public List<BallColorType> CreateInitialBalls(int capacity)
+        {
+            List<BallColorType> result = new List<BallColorType>(capacity);
+            foreach (WaterColumnEntry column in columns)
+            {
+                if (column == null || column.color == BallColorType.None || column.length < 1)
+                {
+                    throw new InvalidOperationException("水柱必须配置有效颜色，长度必须是正整数。");
+                }
+                if (column.length > capacity - result.Count)
+                {
+                    throw new InvalidOperationException($"水柱总长度不能超过试管容量 {capacity}。");
+                }
+                for (int i = 0; i < column.length; i++)
+                {
+                    result.Add(column.color);
+                }
+            }
+            return result;
+        }
     }
 
     private sealed class SelectionState
@@ -46,6 +75,7 @@ public class GameController : MonoBehaviour
         public TubeView tubeView;
         public BallView ball;
         public int ballIndex;
+        public int length;
         public Vector3 slotPosition;
     }
 
@@ -108,8 +138,6 @@ public class GameController : MonoBehaviour
     [SerializeField] private float travelDuration = 0.2f;
     [Tooltip("小球从目标管口落入目标槽位的动画时长。")]
     [SerializeField] private float dropDuration = 0.15f;
-    [Tooltip("同一批倒球中，每个小球开始移动的间隔。")]
-    [SerializeField] private float moveStartInterval = 0.05f;
 
     [Header("Events")]
     [Tooltip("全部目标长管完成且其余试管为空时触发。")]
@@ -197,7 +225,7 @@ public class GameController : MonoBehaviour
 
             try
             {
-                model.SetBalls(entry.balls);
+                model.SetBalls(entry.CreateInitialBalls(entry.tubeView.Capacity));
             }
             catch (Exception exception)
             {
@@ -222,6 +250,7 @@ public class GameController : MonoBehaviour
             }
 
             entry.tubeView.SetRuntimeBalls(spawnedBalls);
+            entry.tubeView.RefreshWaterColumns();
 
             if (shouldPlayIntroDrop)
             {
@@ -295,6 +324,7 @@ public class GameController : MonoBehaviour
             Vector3 startPosition = GetIntroDropStartPosition(dropBall.tubeView, dropBall.slotPosition);
             float startAt = columnIndex * columnStartInterval + sameColumnIndex * sameColumnInterval;
             ball.SnapTo(startPosition);
+            ball.ShowWaterColumn(dropBall.tubeView.GetColumnExtraHeight(dropBall.ballIndex, dropBall.length));
             ball.gameObject.SetActive(false);
 
             dropSequence.InsertCallback(startAt, () =>
@@ -306,10 +336,9 @@ public class GameController : MonoBehaviour
             });
             dropSequence.Insert(
                 startAt,
-                ball.AnimateToWithLandingBounce(
+                ball.CreateDropSequence(
                     dropBall.slotPosition,
-                    Mathf.Max(0.01f, introDropDuration),
-                    Ease.InQuad));
+                    Mathf.Max(0.01f, introDropDuration)));
 
             if (!string.IsNullOrEmpty(introDropSfxName)
                 && visibleDropIndex % sfxBallInterval == 0
@@ -331,6 +360,10 @@ public class GameController : MonoBehaviour
         for (int i = 0; i < introDropStates.Count; i++)
         {
             IntroDropState state = introDropStates[i];
+            if (state != null && state.tubeView != null)
+            {
+                state.tubeView.RefreshWaterColumns();
+            }
             if (state != null
                 && state.model != null
                 && state.model.IsCompleted
@@ -385,13 +418,17 @@ public class GameController : MonoBehaviour
                     continue;
                 }
 
+                int length = state.tubeView.GetWaterColumnLength(ballIndex);
+
                 dropBalls.Add(new IntroDropBallState
                 {
                     tubeView = state.tubeView,
                     ball = ball,
                     ballIndex = ballIndex,
+                    length = length,
                     slotPosition = state.tubeView.GetSlotWorldPosition(ballIndex)
                 });
+                ballIndex += length - 1;
             }
         }
 
@@ -554,6 +591,9 @@ public class GameController : MonoBehaviour
         List<BallView> selectedBalls = selection.sourceView.GetTopBallViews(selectedCount);
         int topSlotIndex = selection.sourceModel.Count - 1;
         float resolvedLiftHeight = ResolveSelectionLiftHeight(selection.sourceView, topSlotIndex);
+        Vector3 startPosition = selection.sourceView.GetSlotWorldPosition(topSlotIndex - selectedCount + 1);
+        Vector3 liftedPosition = selection.sourceView.GetSlotWorldPosition(topSlotIndex)
+            + Vector3.up * resolvedLiftHeight;
 
         Sequence sequence = DOTween.Sequence().SetTarget(selection.sourceView)
             .SetLink(selection.sourceView.gameObject);
@@ -565,11 +605,16 @@ public class GameController : MonoBehaviour
                 continue;
             }
 
-            ball.BeginLiftVisual();
             int slotIndex = selection.sourceModel.Count - 1 - i;
+            if (i > 0)
+            {
+                ball.HideVisuals();
+                continue;
+            }
+
+            ball.SnapTo(startPosition);
+            ball.BeginLiftVisual();
             ball.SetSortingOrder(selection.sourceView.GetSelectedBallSortingOrder(selectionSortingBoost, slotIndex));
-            Vector3 slotPosition = selection.sourceView.GetSlotWorldPosition(slotIndex);
-            Vector3 liftedPosition = slotPosition + Vector3.up * resolvedLiftHeight;
             sequence.Insert(0f, ball.AnimateToNoBounce(
                 liftedPosition,
                 Mathf.Max(0.01f, selectionTweenDuration),
@@ -647,27 +692,9 @@ public class GameController : MonoBehaviour
         List<BallView> selectedBalls = selection.sourceView.GetTopBallViews(selectedCount);
         Sequence sequence = DOTween.Sequence().SetTarget(selection.sourceView)
             .SetLink(selection.sourceView.gameObject);
-        for (int i = 0; i < selectedBalls.Count; i++)
-        {
-            BallView ball = selectedBalls[i];
-            if (ball == null)
-            {
-                continue;
-            }
-
-            int slotIndex = selection.sourceModel.Count - 1 - i;
-            ball.SetSortingOrder(selection.sourceView.GetBallSortingOrder(slotIndex));
-            Vector3 slotPosition = selection.sourceView.GetSlotWorldPosition(slotIndex);
-            sequence.Insert(0f, ball.CreateReturnSequence(
-                slotPosition,
-                Mathf.Max(0.01f, selectionTweenDuration)));
-
-            Tween fadeTween = ball.FadeOutSelectedVisual();
-            if (fadeTween != null)
-            {
-                sequence.Insert(0f, fadeTween);
-            }
-        }
+        int bottomSlotIndex = selection.sourceModel.Count - selectedCount;
+        sequence.Append(CreateColumnReturnSequence(
+            selection.sourceView, selectedBalls, bottomSlotIndex));
 
         if (sequence.IsActive())
         {
@@ -688,76 +715,44 @@ public class GameController : MonoBehaviour
         preparedMove.sourceView.SetSelected(false);
 
         Sequence batchSequence = DOTween.Sequence().SetTarget(this).SetLink(gameObject);
-        if (preparedMove.movedBalls.Count > 0)
+        BallView movingColumn = preparedMove.movedBalls[0];
+        Vector3 liftedPosition = movingColumn.transform.position;
+        for (int i = 1; i < preparedMove.movedBalls.Count; i++)
         {
-            for (int i = 0; i < preparedMove.movedBalls.Count; i++)
-            {
-                BallView ball = preparedMove.movedBalls[i];
-                Vector3 targetSlotPosition = preparedMove.targetView.GetSlotWorldPosition(preparedMove.targetStartCount + i);
-                float sourceExitY = preparedMove.sourceView.TubeMouthAnchor.position.y + transferHoverHeight;
-                float targetHoverY = preparedMove.targetView.TubeMouthAnchor.position.y + transferHoverHeight;
-                Vector3 sourceExitPosition = new Vector3(
-                    ball.transform.position.x,
-                    sourceExitY,
-                    ball.transform.position.z);
-                Vector3 targetHoverPosition = new Vector3(
-                    targetSlotPosition.x,
-                    targetHoverY,
-                    targetSlotPosition.z);
-
-                float ballRaiseDuration = raiseDuration;
-
-                Sequence transferSequence = ball.CreateTransferSequence(
-                    sourceExitPosition,
-                    targetHoverPosition,
-                    targetSlotPosition,
-                    ballRaiseDuration,
-                    travelDuration,
-                    dropDuration,
-                    transferArcHeight);
-
-                float startAt = i * moveStartInterval;
-                int targetSortingOrder = preparedMove.targetView.GetBallSortingOrder(preparedMove.targetStartCount + i);
-                batchSequence.Insert(startAt, transferSequence);
-                batchSequence.InsertCallback(
-                    startAt + ballRaiseDuration + travelDuration,
-                    () =>
-                    {
-                        if (ball != null)
-                        {
-                            ball.FadeOutSelectedVisual();
-                            ball.SetSortingOrder(targetSortingOrder);
-                        }
-                    });
-            }
+            preparedMove.movedBalls[i].HideVisuals();
         }
+
+        int targetBottomSlot = preparedMove.targetStartCount;
+        movingColumn.SetWaterColumnHeight(preparedMove.targetView.GetColumnExtraHeight(
+            targetBottomSlot, preparedMove.movedBalls.Count));
+        Vector3 targetSlotPosition = preparedMove.targetView.GetSlotWorldPosition(targetBottomSlot);
+        Vector3 sourceExitPosition = new Vector3(
+            liftedPosition.x,
+            preparedMove.sourceView.TubeMouthAnchor.position.y + transferHoverHeight,
+            liftedPosition.z);
+        Vector3 targetHoverPosition = new Vector3(
+            targetSlotPosition.x,
+            preparedMove.targetView.TubeMouthAnchor.position.y + transferHoverHeight,
+            targetSlotPosition.z);
+
+        batchSequence.Insert(0f, movingColumn.CreateTransferSequence(
+            sourceExitPosition, targetHoverPosition, targetSlotPosition,
+            raiseDuration, travelDuration, dropDuration, transferArcHeight));
+        batchSequence.InsertCallback(Mathf.Max(0f, raiseDuration) + Mathf.Max(0f, travelDuration), () =>
+        {
+            movingColumn.FadeOutSelectedVisual();
+            movingColumn.SetSortingOrder(preparedMove.targetView.GetBallSortingOrder(targetBottomSlot));
+        });
 
         if (preparedMove.overflowBalls.Count > 0)
         {
-            for (int i = 0; i < preparedMove.overflowBalls.Count; i++)
-            {
-                BallView ball = preparedMove.overflowBalls[i];
-                if (ball == null)
-                {
-                    continue;
-                }
-
-                int slotIndex = GetRuntimeBallSlotIndex(preparedMove.sourceView, ball);
-                if (slotIndex >= 0)
-                {
-                    ball.SetSortingOrder(preparedMove.sourceView.GetBallSortingOrder(slotIndex));
-                    Vector3 slotPosition = preparedMove.sourceView.GetSlotWorldPosition(slotIndex);
-                    batchSequence.Insert(0f, ball.CreateReturnSequence(
-                        slotPosition,
-                        Mathf.Max(0.01f, selectionTweenDuration)));
-                }
-
-                Tween fadeTween = ball.FadeOutSelectedVisual();
-                if (fadeTween != null)
-                {
-                    batchSequence.Insert(0f, fadeTween);
-                }
-            }
+            BallView returningColumn = preparedMove.overflowBalls[0];
+            returningColumn.SnapTo(liftedPosition);
+            returningColumn.BeginLiftVisual();
+            int sourceBottomSlot = preparedMove.sourceView.RuntimeBallViews.Count
+                - preparedMove.overflowBalls.Count;
+            batchSequence.Insert(0f, CreateColumnReturnSequence(
+                preparedMove.sourceView, preparedMove.overflowBalls, sourceBottomSlot));
         }
 
         if (batchSequence.IsActive())
@@ -795,8 +790,7 @@ public class GameController : MonoBehaviour
             overflowBalls = new List<BallView>(move.OverflowCount)
         };
 
-        float moveDirection = targetView.transform.position.x - selection.sourceView.transform.position.x;
-        List<BallView> selectedBalls = GetMoveOrderedTopBalls(selection.sourceView, move.SelectedCount, moveDirection);
+        List<BallView> selectedBalls = selection.sourceView.GetTopBallViews(move.SelectedCount);
         for (int i = 0; i < selectedBalls.Count; i++)
         {
             if (i < move.TransferCount)
@@ -836,23 +830,20 @@ public class GameController : MonoBehaviour
         return preparedMove;
     }
 
-    private static int GetRuntimeBallSlotIndex(TubeView tubeView, BallView ball)
+    private Sequence CreateColumnReturnSequence(TubeView tubeView, List<BallView> balls, int bottomSlotIndex)
     {
-        if (tubeView == null || ball == null)
+        for (int i = 1; i < balls.Count; i++)
         {
-            return -1;
+            balls[i].HideVisuals();
         }
 
-        IReadOnlyList<BallView> runtimeBalls = tubeView.RuntimeBallViews;
-        for (int i = 0; i < runtimeBalls.Count; i++)
-        {
-            if (runtimeBalls[i] == ball)
-            {
-                return i;
-            }
-        }
-
-        return -1;
+        BallView column = balls[0];
+        column.SetWaterColumnHeight(tubeView.GetColumnExtraHeight(bottomSlotIndex, balls.Count));
+        column.SetSortingOrder(tubeView.GetBallSortingOrder(bottomSlotIndex));
+        column.FadeOutSelectedVisual();
+        return column.CreateDropSequence(
+            tubeView.GetSlotWorldPosition(bottomSlotIndex),
+            Mathf.Max(0.01f, selectionTweenDuration));
     }
 
     private SelectionState CreateSelection(TubeView sourceView, TubeModel sourceModel)
@@ -874,30 +865,6 @@ public class GameController : MonoBehaviour
         }
 
         return Color.white;
-    }
-
-    private static List<BallView> GetMoveOrderedTopBalls(TubeView sourceView, int count, float horizontalDirection)
-    {
-        List<BallView> balls = sourceView.GetTopBallViews(count);
-        bool movingLeft = horizontalDirection < 0f;
-
-        balls.Sort((left, right) =>
-        {
-            if (left == null && right == null) return 0;
-            if (left == null) return 1;
-            if (right == null) return -1;
-
-            float yDelta = right.transform.position.y - left.transform.position.y;
-            if (Mathf.Abs(yDelta) > 0.01f)
-            {
-                return yDelta > 0f ? 1 : -1;
-            }
-
-            int xCompare = left.transform.position.x.CompareTo(right.transform.position.x);
-            return movingLeft ? xCompare : -xCompare;
-        });
-
-        return balls;
     }
 
     private void RecordTubeClick()
@@ -986,6 +953,8 @@ public class GameController : MonoBehaviour
             RemovePendingOutgoing(preparedMove.sourceView);
             RemovePendingIncoming(preparedMove.targetView);
         }
+        RefreshTubeColumnsIfIdle(preparedMove.sourceView);
+        RefreshTubeColumnsIfIdle(preparedMove.targetView);
     }
 
     private void StartTubeTransition(TubeView tubeView, IEnumerator routine)
@@ -1014,6 +983,18 @@ public class GameController : MonoBehaviour
                 tubeTransitionCoroutines.Remove(tubeView);
             }
         }
+        RefreshTubeColumnsIfIdle(tubeView);
+    }
+
+    private void RefreshTubeColumnsIfIdle(TubeView tubeView)
+    {
+        if (tubeView == null || IsTubeSelectionLocked(tubeView)
+            || tubeTransitionCoroutines.ContainsKey(tubeView)
+            || (currentSelection != null && currentSelection.sourceView == tubeView))
+        {
+            return;
+        }
+        tubeView.RefreshWaterColumns();
     }
 
     private void StopTubeTransition(TubeView tubeView)

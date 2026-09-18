@@ -7,6 +7,7 @@ public class WaterTransferVisual : MonoBehaviour
     private static readonly int WaterDownState = Animator.StringToHash("Base Layer.water-down");
     [SerializeField] private GameObject visualRoot;
     [SerializeField] private SpriteRenderer body;
+    [SerializeField] private WaterBodyTopAnchor bodyTopAnchor;
     [SerializeField] private Animator waterUp;
     [SerializeField] private Animator waterDown;
     [Tooltip("落位后，水柱从底部展开到完整高度的时间。")]
@@ -15,12 +16,10 @@ public class WaterTransferVisual : MonoBehaviour
 
     private SpriteRenderer upRenderer;
     private SpriteRenderer downRenderer;
-    private Vector3 bodyScale;
     private float downClipDuration;
 
     private void Awake()
     {
-        bodyScale = body.transform.localScale;
         upRenderer = waterUp.GetComponent<SpriteRenderer>();
         downRenderer = waterDown.GetComponent<SpriteRenderer>();
         downClipDuration = waterDown.runtimeAnimatorController.animationClips[0].length;
@@ -47,6 +46,13 @@ public class WaterTransferVisual : MonoBehaviour
         waterDown.speed = downClipDuration / Mathf.Max(0.01f, duration);
         waterDown.Play(WaterDownState, 0, 0f);
         waterDown.Update(0f);
+    }
+
+    public void HideVisuals()
+    {
+        visualRoot.SetActive(false);
+        waterUp.gameObject.SetActive(false);
+        waterDown.gameObject.SetActive(false);
     }
 
     public void SyncSorting()
@@ -81,15 +87,12 @@ public class WaterTransferVisual : MonoBehaviour
 
     private void SetRevealProgress(float progress)
     {
-        // Body 使用底部支点，Up 是其同级对象，由 WaterBodyTopAnchor 跟随。
-        Vector3 scale = bodyScale;
-        scale.y *= progress;
-        body.transform.localScale = scale;
+        bodyTopAnchor.SetRevealProgress(progress);
     }
 
     public void RestoreBody()
     {
-        body.transform.localScale = bodyScale;
+        bodyTopAnchor.SetRevealProgress(1f);
         waterUp.gameObject.SetActive(false);
         waterDown.gameObject.SetActive(false);
         visualRoot.SetActive(true);

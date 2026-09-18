@@ -1,3 +1,244 @@
+## 2026-09-18 修复 SpriteMask 导致编辑器启动崩溃
+
+**原因**
+上次直接写入场景的 SpriteMask 序列化数据不完整，缺少 Unity 默认遮罩材质；加载场景时在 Renderer::GetMaterial → SpriteMask::SetupProperties 中发生原生崩溃。独立 C# 编译无法发现此问题。
+
+**修改**
+- 备份故障场景和崩溃日志，仅移除错误的六个遮罩。
+- 使用 Unity 2022.3.62f3 的 AddComponent<SpriteMask> 正式创建遮罩，并由 EditorSceneManager 保存完整序列化数据。
+- 保留内腔遮罩、按高度显露效果和用户其他修改；一次性恢复脚本已删除。
+
+**主要文件**
+- `Assets/Scenes/main.unity`
+
+**Unity 编辑器操作**
+已自动重新启动项目，无需清空 Library 或重建项目。
+
+**注意**
+真实 Unity 批处理创建、保存、再次加载 main 场景成功，退出码为 0；六个遮罩的 Sprite/材质引用正常，两份水相关 Shader 未报告编译错误。恢复日志：`/tmp/BallSort-mask-recovery.log`。未提交 Git。
+
+## 2026-09-18 修复空管入水时底部挤压和越界
+
+**原因**
+Body 从零缩放会压扁圆弧底部，Up 保持宽度；玻璃图片本身不裁剪管外像素，底部因而露出。
+
+**修改**
+- 六根试管增加独立、固定的 WaterInteriorMask，复用已贴合管内的蜡烛轮廓 Sprite 的 Alpha，不跟随蜡烛完成动画缩放。
+- Body 与 Up 使用 Visible Inside Mask；water-up/water-down 飞行帧动画不受遮罩影响。
+- Body 保持完整尺寸，用 WaterBodyReveal 材质按液面高度裁剪显露，替代 Y 轴零到一缩放。
+- WaterBodyTopAnchor 统一管理显露进度、裁剪平面及 Up 位置；进度为零时隐藏 Up，取消/重置时恢复完整显示。
+
+**主要文件**
+- `Assets/Scenes/main.unity`
+- `Assets/prefabs/Water/body.prefab`
+- `Assets/prefabs/Water/WaterBodyReveal.shader`
+- `Assets/prefabs/Water/WaterBodyReveal.mat`
+- `Assets/Scripts/Game/WaterTransferVisual.cs`
+- `Assets/Scripts/Game/WaterBodyTopAnchor.cs`
+
+**Unity 编辑器操作**
+已配置场景遮罩、预制体材质及组件引用。等待导入并重新加载 main 场景后运行；无需手动挂载。新增其他试管时需一并复制 WaterInteriorMask。
+
+**注意**
+代码使用 Unity/项目程序集独立编译通过；六个遮罩的层级和轮廓变换、场景 fileID 唯一性、Body/Up 遮罩范围、零进度和重置、不同长度及变换下的裁剪平面检查通过。编辑器连接不可用，尚未实际播放验证 SpriteMask 与新 Shader 的渲染效果。未提交 Git。
+
+## 2026-09-18 恢复误删的 Body 预制体
+
+**原因**
+`body.prefab` 及其 `.meta` 被删除，main 场景仍引用该水柱预制体。
+
+**修改**
+- 从 Git 索引恢复预制体和原始 `.meta`，保留原 GUID 与组件 fileID。
+
+**主要文件**
+- `Assets/prefabs/Water/body.prefab`
+- `Assets/prefabs/Water/body.prefab.meta`
+
+**Unity 编辑器操作**
+等待 Unity 重新导入；场景中的资源引用仍存在，无需重新拖拽。
+
+**注意**
+已验证恢复文件与索引一致，且匹配 main 场景引用。未改动其他现有修改，未提交 Git。
+
+## 2026-09-18 将连续水流改接到 ShootRoot 发射路径
+
+**原因**
+连续水流需求指的是 ShootRoot 上方小球的 DOPath，而不是下方试管之间的转移；此前接错位置。
+
+**修改**
+- 撤回试管转移中的水流接入，恢复整段 DOPath 移动、water-down 下落和 Body 展开。
+- ShootBall 直接采样原 DOPath，沿原 Path 节点生成连续水带，替换逐颗小球的对象池发射。
+- 水头沿路径延伸，持续出水后水尾收走，保留发射结束后装置退出、GameRoot 进入及引导流程。
+- 水流材质引用改配到 main 场景的 ShootRoot。保留原路径类型、0.7 秒路径时长及排序 50；持续出水 2.37 秒对应原 80 颗、0.03 秒间隔的发射跨度。
+
+**主要文件**
+- `Assets/Scripts/Game/ShootBall.cs`
+- `Assets/Scenes/main.unity`
+- `Assets/Scripts/Game/BallView.cs`
+- `Assets/Scripts/Game/GameController.cs`
+- `Assets/Scripts/Game/WaterTransferVisual.cs`
+- `Assets/prefabs/Water/body.prefab`
+- `Assets/prefabs/Water/WaterStream.mat`
+- `Assets/prefabs/Water/WaterStream.shader`
+
+**Unity 编辑器操作**
+- 已配置 ShootRoot → Shoot Ball → Water Stream，运行 main 即可查看上方发射效果。
+- Stream Color 调颜色，Stream Width 调粗细，Emission Duration 调连续出水时间，Move Duration 调走完整条路径的时间。
+- WaterStream 材质仍可替换 Water Texture；正式贴图使用 Repeat，并将 Temporary Stripe Strength 设为 0。
+
+**注意**
+Unity/DOTween 实际程序集编译通过；实际 ShootBall 路径裁剪方法通过 3003 次时间采样，覆盖短/长出水、连续几何、源头连接、到达终点、纹理相位和尾部清除。场景材质引用与下方试管恢复检查通过。未实际播放或验证 Shader 的平台渲染。未提交 Git。
+
+## 2026-09-18 沿发射路径显示连续水流（试管接入已撤回）
+
+**原因**
+水柱转移需要显示沿路径连续流动的图片效果，并为后续替换水贴图保留入口。
+
+**修改**
+- 保留现有出管弧线，将弧线和入管段连接成完整路径；由一个 LineRenderer 显示水头到水尾之间的连续水带。
+- 水头沿路径延伸，停止出水后水尾收走；出水时长按转移整数长度计算，不再逐格发射。
+- 水流抵达后目标整段 Body 逐渐长高，水流末端随液面上升；结束和中断时隐藏水带。
+- 新增 URP 无光照水流材质，使用当前 Body 颜色和滚动浅色条纹，支持后续指定 Water Texture；固定材质通过预制体引用，运行时只生成路径几何。
+- 保留开局 water-down 和取消选择的返回效果。
+
+**主要文件**
+- `Assets/Scripts/Game/BallView.cs`
+- `Assets/Scripts/Game/GameController.cs`
+- `Assets/Scripts/Game/WaterTransferVisual.cs`
+- `Assets/prefabs/Water/body.prefab`
+- `Assets/prefabs/Water/WaterStream.mat`
+- `Assets/prefabs/Water/WaterStream.shader`
+
+**Unity 编辑器操作**
+- 已配置 body 预制体的 Stream Material；Stream Width 调粗细，Stream Seconds Per Unit 调每格出水时长。
+- WaterStream 材质的 Texture Flow Speed 调条纹流速。以后把水贴图指定给 Water Texture，并将 Temporary Stripe Strength 设为 0；贴图 Wrap Mode 使用 Repeat，纹理沿图片横向流动。
+
+**注意**
+代码已使用 Unity/项目程序集独立编译。实际水流时间线及路径裁剪方法通过长度 1、2、4、7 各 1001 个时间采样检查，覆盖抵达前隐藏、连续几何、液面跟随、完整增长及尾部清除；预制体和材质引用已校验。编辑器连接不可用，尚未实际播放或验证 Shader 在 Editor/目标平台上的编译效果。未提交 Git。
+
+## 2026-09-18 开局各试管同时下落
+
+**原因**
+开局不再需要从左到右逐管开始下落。
+
+**修改**
+- main 场景 GameController 的 Intro Drop Start Interval 从 0.14 改为 0，使各管同时开始。
+- 保留同管内 0.24 秒的水柱间隔，以及 water-down 落位后展开整段水柱的效果。
+
+**主要文件**
+- `Assets/Scenes/main.unity`
+
+**Unity 编辑器操作**
+已修改保存的场景配置；若当前打开的场景未刷新，重新加载 main 场景。
+
+**注意**
+已检查配置值及现有时间计算。编辑器连接不可用，未实际播放验证。未修改代码或提交 Git。
+
+## 2026-09-18 开局使用 Water-down 下落
+
+**原因**
+开局仍直接移动完整 Body，需要先播放 water-down，落位后再出现整段水柱。
+
+**修改**
+- 开局改用整段下落序列：隐藏普通水柱、播放 water-down、落位后从底部展开到配置长度。
+- 与返回流程共用 CreateDropSequence，首次下落无需已有 water-up 特效即可播放。
+- 保留开局的分管与同管间隔、音效节奏，等待整段展开结束后开放交互。
+
+**主要文件**
+- `Assets/Scripts/Game/GameController.cs`
+- `Assets/Scripts/Game/BallView.cs`
+- `Assets/Scripts/Game/WaterTransferVisual.cs`
+
+**Unity 编辑器操作**
+无需额外配置。Intro Drop Duration 控制开局下落时长，Body 预制体的 Reveal Duration 沿用整段展开时长。
+
+**注意**
+Unity 项目程序集独立编译通过；使用实际下落方法及动画替身检查延迟开始、water-down → 落位 → 展开的顺序和下落时长。尚未在 Unity 中实际播放验证。未提交 Git。
+
+## 2026-09-18 水柱整段下落与展开
+
+**原因**
+整数长度此前仅在静止显示时合并，转移和返回仍逐格播放动画，导致水柱下落时拆成多段。
+
+**修改**
+- 每段只使用一个可见 Body 播放转移、下落和展开，其余容量成员保持隐藏。
+- 将完整段高设置到 Body，从目标底部槽位一次展开到对应长度；取消选择也整段返回。
+- 容量不足时，转移部分与剩余部分各作为一段播放，保留容量计算规则。
+- 删除逐格转移间隔配置；保留用户当前关卡颜色和长度。
+
+**主要文件**
+- `Assets/Scripts/Game/GameController.cs`
+- `Assets/Scripts/Game/BallView.cs`
+- `Assets/Scenes/main.unity`
+
+**Unity 编辑器操作**
+无需重新配置，等待编译后运行验证下落效果。
+
+**注意**
+Unity 项目程序集独立编译通过。使用实际控制器方法和动画替身验证长度 1、2、4 的单次转移、容量不足时 2＋3 的拆分返回、长度 3 的取消返回及底部落点。尚未在 Unity 中实际播放验证。未提交 Git。
+
+## 2026-09-18 关卡水柱配置支持整数长度
+
+**原因**
+每种颜色需要直接配置水柱长度，不再逐格重复填写颜色。
+
+**修改**
+- Level Entries 使用 Columns 列表，每项配置 Color 和正整数 Length；长度按槽位计数，总长不超过容量 7，空管使用空列表。
+- 连续同色显示为一段加长的 Body，开局按整段下落，取消选择和转移结束后重新合并显示。
+- 保留按格计算容量及拆分转移的逻辑；原场景迁移为每个非空管长度 5＋2，保持原有颜色顺序和数量。
+
+**主要文件**
+- `Assets/Scripts/Game/GameController.cs`
+- `Assets/Scripts/Game/TubeView.cs`
+- `Assets/Scripts/Game/BallView.cs`
+- `Assets/Scenes/main.unity`
+
+**Unity 编辑器操作**
+等待编译后，在 GameController → Level Entries → Columns 配置颜色和长度；列表顺序为从底部到顶部。
+
+**注意**
+独立编译通过；3＋4 配置、非法长度、超容量、空管、连续同色合并、容量不足拆分及场景迁移检查通过。尚未在 Unity 中实际播放验证。未提交 Git。
+
+## 2026-09-18 连续同色水柱共用抬起动画
+
+**原因**
+连续同色水柱选中时只需要一个 water-up 抬到管口，不应按格重复显示抬起效果。
+
+**修改**
+- 隐藏整段连续同色水柱，仅由最上格显示 water-up，从连续段底部升至管口。
+- 按实际槽位顺序决定转移与溢出成员，避免动画位置影响代表水柱的转移顺序。
+- 取消选择时，隐藏成员直接恢复展开，不重复播放抬起/下落效果；保留实际格数和容量规则。
+
+**主要文件**
+- `Assets/Scripts/Game/GameController.cs`
+- `Assets/Scripts/Game/BallView.cs`
+- `Assets/Scripts/Game/WaterTransferVisual.cs`
+
+**Unity 编辑器操作**
+无额外配置，等待编译后运行查看。
+
+**注意**
+独立编译通过；实际 TubeModel 的连续同色、两格转移、容量不足返回及数量守恒检查通过。尚未在 Unity 中实际播放验证。未提交 Git。
+
+## 2026-09-18 Water-up 尾段改为往返循环
+
+**原因**
+首轮结束后需要在时间轴第 30 帧与第 10 帧之间往返播放。
+
+**修改**
+- 保留首轮 0～30 帧完整播放。
+- 循环片段依次播放 29～10、11～30，承接首轮末帧 30；两个转折点不重复停留。
+- 保持 30 FPS，一轮往返 40 帧，约 1.33 秒。
+
+**主要文件**
+- `Assets/Controller/water-up-loop.anim`
+
+**Unity 编辑器操作**
+等待动画资源重新导入后运行查看。
+
+**注意**
+已验证 Sprite 帧序列、关键帧时间和循环接缝；尚未实际播放预览。未提交 Git。
+
 ## 2026-09-17 水柱抬起与下落改为帧动画
 
 **原因**
@@ -129,4 +370,3 @@ Body 使用 Simple 绘制模式，Sprite Border 未参与尺寸调整。
 
 **注意**
 未进行 Unity 运行验证；未提交 Git。
-

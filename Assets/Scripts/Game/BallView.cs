@@ -34,6 +34,7 @@ public class BallView : MonoBehaviour
     private Vector3 defaultLocalPosition = Vector3.zero;
     private Vector3 defaultGlowScale = Vector3.one;
     private Color defaultBodyColor = Color.white;
+    private Vector2 defaultBodySize;
     private Color defaultGlowColor = Color.white;
 
     public BallColorType ColorType { get; private set; }
@@ -106,6 +107,7 @@ public class BallView : MonoBehaviour
         if (bodyRenderer != null)
         {
             defaultBodyColor = bodyRenderer.color;
+            defaultBodySize = bodyRenderer.size;
         }
 
         if (glowRenderer != null)
@@ -149,11 +151,17 @@ public class BallView : MonoBehaviour
     {
         transform.DOKill();
 
+        if (bodyRenderer != null)
+        {
+            bodyRenderer.size = defaultBodySize;
+        }
+
         if (visualRoot != null)
         {
             visualRoot.DOKill();
             visualRoot.localScale = defaultScale;
             visualRoot.localPosition = defaultLocalPosition;
+            visualRoot.gameObject.SetActive(true);
         }
 
         if (glowRenderer != null)
@@ -186,7 +194,33 @@ public class BallView : MonoBehaviour
         }
     }
 
-    public Sequence CreateReturnSequence(Vector3 slotPosition, float duration)
+    public void HideVisuals()
+    {
+        KillTweens();
+        if (waterTransferVisual != null)
+        {
+            waterTransferVisual.HideVisuals();
+        }
+        else
+        {
+            visualRoot.gameObject.SetActive(false);
+        }
+    }
+
+    public void ShowWaterColumn(float extraWorldHeight)
+    {
+        ResetVisuals();
+        SetWaterColumnHeight(extraWorldHeight);
+    }
+
+    public void SetWaterColumnHeight(float extraWorldHeight)
+    {
+        Vector2 size = defaultBodySize;
+        size.y += extraWorldHeight / Mathf.Abs(bodyRenderer.transform.lossyScale.y);
+        bodyRenderer.size = size;
+    }
+
+    public Sequence CreateDropSequence(Vector3 slotPosition, float duration)
     {
         transform.DOKill();
         Sequence sequence = DOTween.Sequence();
@@ -198,6 +232,10 @@ public class BallView : MonoBehaviour
         if (waterTransferVisual != null)
         {
             sequence.Append(waterTransferVisual.CreateRevealSequence());
+        }
+        else
+        {
+            sequence.AppendCallback(() => visualRoot.gameObject.SetActive(true));
         }
         return sequence;
     }
@@ -453,7 +491,6 @@ public class BallView : MonoBehaviour
     {
         transform.DOKill();
         Sequence sequence = DOTween.Sequence();
-
         float clampedArcHeight = Mathf.Max(0f, arcHeight);
         float exitPathDuration = Mathf.Max(0f, raiseDuration) + Mathf.Max(0f, travelDuration);
         if (exitPathDuration > 0f)
@@ -465,7 +502,6 @@ public class BallView : MonoBehaviour
         {
             transform.position = targetHoverPosition;
         }
-
 
         if (waterTransferVisual != null)
         {

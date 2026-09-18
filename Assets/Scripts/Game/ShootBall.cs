@@ -1,181 +1,150 @@
 using System.Collections;
-using System.Collections.Generic;
 using DG.Tweening;
 using UnityEngine;
-using UnityEngine.Serialization;
+
 /// <summary>
-/// 发射球
+/// 沿 ShootRoot 原发射路径显示连续水流，结束后进入试管关卡。
 /// </summary>
 public class ShootBall : MonoBehaviour
 {
     [Header("Refs")]
-    [Tooltip("路径点根节点，用于获取计算路径点位置。")]
+    [Tooltip("沿用原小球 DOPath 的路径节点和顺序。")]
     public Transform pathRoot;
-    [Tooltip("发射用小球预制体，需要挂 BallView。")]
-    [FormerlySerializedAs("ballPrefab")]
-    public GameObject ball;
-    [Tooltip("小球颜色与 Sprite 配置表，用于随机上色。")]
-    public BallVisualPalette ballVisualPalette;
-
     public Transform moveShoot;
     public Transform gameRoot;
     public GuidePanel guidePanel;
 
-    [Header("Shoot")]
-    [Tooltip("启动后发射的小球数量。")]
-    public int ballCount = 10;
-    [Tooltip("相邻两个小球的发射间隔。")]
-    public float spawnInterval = 0.08f;
-    [Tooltip("单个小球走完整条路径的时长。")]
-    public float moveDuration = 1.5f;
-    [Tooltip("屏幕上同时飞行的小球上限，控制低端设备的峰值压力。")]
-    public int maxActiveBalls = 36;
-    [Tooltip("开场前预创建的小球数量，避免第一波发射时连续 Instantiate 卡顿。")]
-    public int prewarmCount = 40;
-    [Tooltip("发射小球的 SpriteRenderer 排序值。")]
+    [Header("Water Stream")]
+    public Material streamMaterial;
+    public Color streamColor = new Color(0.15f, 0.7f, 1f, 1f);
+    [Min(0.01f)] public float streamWidth = 0.2f;
+    [Tooltip("源头连续出水的时间，结束后水尾继续沿路径流出。")]
+    [Min(0.01f)] public float emissionDuration = 2.37f;
+    [Tooltip("水头或水尾走完整条原路径的时间。")]
+    [Min(0.01f)] public float moveDuration = 0.7f;
     public int sortingOrder = 50;
-    [Tooltip("发射实例小球相对预制体的缩放倍率。")]
-    public float shootBallScaleMultiplier = 0.8f;
-    [Tooltip("DOTween 路径类型，CatmullRom 更平滑，Linear 会直线连接路径点。")]
     public PathType pathType = PathType.CatmullRom;
 
-    private static readonly BallColorType[] RandomColors =
-    {
-        BallColorType.Yellow,
-        BallColorType.Green,
-        BallColorType.Blue,
-        BallColorType.Purple,
-        BallColorType.Orange,
-        BallColorType.Red
-    };
-
-    private readonly List<GameObject> activeBalls = new List<GameObject>();
-    private readonly Dictionary<GameObject, BallView> ballViewCache = new Dictionary<GameObject, BallView>();
-    private ObjectPoolManager objectPoolManager;
-    private string PoolName => $"ShootBall_{ball.name}";
+    private LineRenderer stream;
+    private Vector3[] sampledPath;
+    private float[] pathDistances;
+    private MaterialPropertyBlock streamProperties;
+    private static readonly int PathOffset = Shader.PropertyToID("_PathOffset");
 
     private void Start()
     {
-        if (!CanShoot())
+        if (pathRoot == null || pathRoot.childCount < 2 || streamMaterial == null)
         {
+            Debug.LogWarning("ShootRoot 需要至少两个路径节点和 Stream Material。", this);
             return;
         }
 
-        objectPoolManager = ObjectPoolManager.Instance;
-        objectPoolManager.Prewarm(PoolName, ball, Mathf.Max(0, prewarmCount));
+        PrepareStream();
         PrepareDelayedGuide();
-        StartCoroutine(ShootRoutine(GetPathPositions()));
-
+        StartCoroutine(ShootRoutine());
     }
 
-    private IEnumerator ShootRoutine(Vector3[] pathPositions)
+    private void PrepareStream()
+    {
+        Vector3[] waypoints = new Vector3[pathRoot.childCount];
+        for (int i = 0; i < waypoints.Length; i++)
+        {
+            waypoints[i] = pathRoot.GetChild(i).position;
+        }
+
+        GameObject streamObject = new GameObject("ShootWaterStream");
+        streamObject.transform.SetParent(transform, false);
+        streamObject.transform.position = waypoints[0];
+        stream = streamObject.AddComponent<LineRenderer>();
+        stream.enabled = false;
+        stream.useWorldSpace = true;
+        stream.sharedMaterial = streamMaterial;
+        stream.textureMode = LineTextureMode.Tile;
+        stream.widthMultiplier = streamWidth;
+        stream.startColor = streamColor;
+        stream.endColor = streamColor;
+        stream.sortingOrder = sortingOrder;
+        stream.numCapVertices = 4;
+        stream.numCornerVertices = 4;
+        stream.shadowCastingMode = UnityEngine.Rendering.ShadowCastingMode.Off;
+        stream.receiveShadows = false;
+        streamProperties = new MaterialPropertyBlock();
+
+        // 直接采样原 DOPath，避免另写曲线算法导致与 Path 节点的实际路线不同。
+        Tween pathTween = streamObject.transform
+            .DOPath(waypoints, Mathf.Max(0.01f, moveDuration), pathType)
+            .SetEase(Ease.Linear).Pause();
+        pathTween.ForceInit();
+        sampledPath = pathTween.PathGetDrawPoints(12);
+        pathTween.Kill();
+
+        pathDistances = new float[sampledPath.Length];
+        for (int i = 1; i < sampledPath.Length; i++)
+        {
+            pathDistances[i] = pathDistances[i - 1]
+                + Vector3.Distance(sampledPath[i - 1], sampledPath[i]);
+        }
+    }
+
+    private IEnumerator ShootRoutine()
     {
         yield return new WaitForSeconds(0.2f);
-
-        int count = Mathf.Max(0, ballCount);
-
-        for (int i = 0; i < count; i++)
+        float travelTime = Mathf.Max(0.01f, moveDuration);
+        float emitTime = Mathf.Max(0.01f, emissionDuration);
+        float elapsed = 0f;
+        while (elapsed < emitTime + travelTime)
         {
-            while (maxActiveBalls > 0 && activeBalls.Count >= maxActiveBalls)
-            {
-                yield return null;
-            }
-
-            SpawnBall(pathPositions);
-
-            if (spawnInterval > 0f && i < count - 1)
-            {
-                yield return new WaitForSeconds(spawnInterval);
-            }
+            UpdateStream(elapsed, travelTime, emitTime);
+            yield return null;
+            elapsed += Time.deltaTime;
         }
-        yield return new WaitUntil(() => activeBalls.Count == 0);
-
+        stream.enabled = false;
         PlayMoveShootExit();
     }
 
-    private void SpawnBall(Vector3[] pathPositions)
+    private void UpdateStream(float elapsed, float travelTime, float emitTime)
     {
-        if (objectPoolManager == null)
+        float length = pathDistances[pathDistances.Length - 1];
+        float head = Mathf.Clamp01(elapsed / travelTime) * length;
+        float tail = Mathf.Clamp01((elapsed - emitTime) / travelTime) * length;
+        stream.enabled = head - tail > 0.001f;
+        if (!stream.enabled)
         {
             return;
         }
 
-        GameObject shootBall = objectPoolManager.Get(PoolName, ball, this.transform);
-        if (shootBall == null)
+        int pointCount = 2;
+        for (int i = 1; i < sampledPath.Length - 1; i++)
         {
-            return;
+            if (pathDistances[i] > tail && pathDistances[i] < head) pointCount++;
         }
-
-        activeBalls.Add(shootBall);
-        InitializeBall(shootBall);
-        shootBall.transform.position = pathPositions[0];
-        shootBall.transform.localRotation = Quaternion.identity;
-        shootBall.transform.localScale = ball.transform.localScale * Mathf.Max(0.01f, shootBallScaleMultiplier);
-        shootBall.transform.DOKill();
-
-        shootBall.transform
-            .DOPath(pathPositions, Mathf.Max(0.01f, moveDuration), pathType)
-            .SetEase(Ease.Linear)
-            .OnComplete(() => RecycleBall(shootBall));
-    }
-
-    private Vector3[] GetPathPositions()
-    {
-        Vector3[] pathPositions = new Vector3[pathRoot.childCount];
-        for (int i = 0; i < pathRoot.childCount; i++)
+        stream.positionCount = pointCount;
+        stream.SetPosition(0, SamplePath(tail));
+        int index = 1;
+        for (int i = 1; i < sampledPath.Length - 1; i++)
         {
-            pathPositions[i] = pathRoot.GetChild(i).position;
-        }
-
-        return pathPositions;
-    }
-
-    private bool CanShoot()
-    {
-        if (ball == null || ballVisualPalette == null || pathRoot == null || pathRoot.childCount < 2)
-        {
-            return false;
-        }
-        return true;
-    }
-
-    private void InitializeBall(GameObject shootBall)
-    {
-        if (!ballViewCache.TryGetValue(shootBall, out BallView ballView) || ballView == null)
-        {
-            ballView = shootBall.GetComponent<BallView>();
-            if (ballView != null)
+            if (pathDistances[i] > tail && pathDistances[i] < head)
             {
-                ballViewCache[shootBall] = ballView;
+                stream.SetPosition(index++, sampledPath[i]);
             }
         }
-
-        if (ballView == null)
-        {
-            return;
-        }
-
-        BallColorType randomColor = RandomColors[Random.Range(0, RandomColors.Length)];
-        ballView.Initialize(randomColor, ballVisualPalette);
-        ballView.ResetVisuals();
-        ballView.SetSortingOrder(sortingOrder);
+        stream.SetPosition(index, SamplePath(head));
+        streamProperties.SetFloat(PathOffset, tail);
+        stream.SetPropertyBlock(streamProperties);
     }
 
-    private void RecycleBall(GameObject shootBall)
+    private Vector3 SamplePath(float distance)
     {
-        if (shootBall == null || !activeBalls.Remove(shootBall))
+        for (int i = 1; i < sampledPath.Length; i++)
         {
-            return;
+            if (distance <= pathDistances[i])
+            {
+                float segmentLength = pathDistances[i] - pathDistances[i - 1];
+                float t = segmentLength > 0f ? (distance - pathDistances[i - 1]) / segmentLength : 0f;
+                return Vector3.Lerp(sampledPath[i - 1], sampledPath[i], t);
+            }
         }
-
-        shootBall.transform.DOKill();
-        if (objectPoolManager != null)
-        {
-            objectPoolManager.Release(PoolName, shootBall);
-            return;
-        }
-
-        Destroy(shootBall);
+        return sampledPath[sampledPath.Length - 1];
     }
 
     private void PlayMoveShootExit()
@@ -235,11 +204,9 @@ public class ShootBall : MonoBehaviour
     private void OnDisable()
     {
         StopAllCoroutines();
-
-        List<GameObject> ballsToRecycle = new List<GameObject>(activeBalls);
-        for (int i = 0; i < ballsToRecycle.Count; i++)
+        if (stream != null)
         {
-            RecycleBall(ballsToRecycle[i]);
+            stream.enabled = false;
         }
     }
 }

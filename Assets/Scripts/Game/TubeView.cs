@@ -303,6 +303,51 @@ public class TubeView : MonoBehaviour
         }
     }
 
+    public int GetWaterColumnLength(int startIndex)
+    {
+        BallColorType color = runtimeBallViews[startIndex].ColorType;
+        int end = startIndex + 1;
+        while (end < runtimeBallViews.Count && runtimeBallViews[end].ColorType == color)
+        {
+            end++;
+        }
+        return end - startIndex;
+    }
+
+    public float GetColumnExtraHeight(int startIndex, int length)
+    {
+        return Vector3.Distance(GetSlotWorldPosition(startIndex), GetSlotWorldPosition(startIndex + length - 1));
+    }
+
+    public void RefreshWaterColumns()
+    {
+        if (completedVisualApplied)
+        {
+            return;
+        }
+
+        for (int start = 0; start < runtimeBallViews.Count;)
+        {
+            int length = GetWaterColumnLength(start);
+            for (int i = start; i < start + length; i++)
+            {
+                BallView ball = runtimeBallViews[i];
+                ball.SnapTo(GetSlotWorldPosition(i));
+                ball.SetSortingOrder(GetBallSortingOrder(i));
+                if (i == start)
+                {
+                    ball.ShowWaterColumn(GetColumnExtraHeight(start, length));
+                }
+                else
+                {
+                    ball.gameObject.SetActive(true);
+                    ball.HideVisuals();
+                }
+            }
+            start += length;
+        }
+    }
+
     public void ClearRuntimeBalls()
     {
         for (int i = 0; i < runtimeBallViews.Count; i++)

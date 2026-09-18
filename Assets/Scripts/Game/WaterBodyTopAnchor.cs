@@ -14,6 +14,10 @@ public class WaterBodyTopAnchor : MonoBehaviour
     [SerializeField] private float upLightenAmount = 0.4f;
 
     private SpriteRenderer body;
+    private float revealProgress = 1f;
+    private MaterialPropertyBlock revealProperties;
+    private static readonly int RevealProgressId = Shader.PropertyToID("_RevealProgress");
+    private static readonly int RevealPlaneId = Shader.PropertyToID("_RevealPlane");
 
     private void OnEnable()
     {
@@ -24,6 +28,32 @@ public class WaterBodyTopAnchor : MonoBehaviour
     private void LateUpdate()
     {
         AlignUp();
+        if (revealProgress > 0f && revealProgress < 1f)
+        {
+            ApplyRevealClip();
+        }
+    }
+
+    public void SetRevealProgress(float progress)
+    {
+        revealProgress = Mathf.Clamp01(progress);
+        if (body == null) body = GetComponent<SpriteRenderer>();
+        AlignUp();
+        ApplyRevealClip();
+    }
+
+    private void ApplyRevealClip()
+    {
+        if (revealProperties == null) revealProperties = new MaterialPropertyBlock();
+        Bounds bounds = body.localBounds;
+        Vector3 surface = transform.TransformPoint(new Vector3(bounds.center.x,
+            Mathf.Lerp(bounds.min.y, bounds.max.y, revealProgress), bounds.center.z));
+        Vector3 normal = transform.up;
+        body.GetPropertyBlock(revealProperties);
+        revealProperties.SetFloat(RevealProgressId, revealProgress);
+        revealProperties.SetVector(RevealPlaneId,
+            new Vector4(normal.x, normal.y, normal.z, Vector3.Dot(normal, surface)));
+        body.SetPropertyBlock(revealProperties);
     }
 
     private void AlignUp()
@@ -36,7 +66,8 @@ public class WaterBodyTopAnchor : MonoBehaviour
         Bounds bodyBounds = body.localBounds;
         Bounds upBounds = up.localBounds;
         Vector3 bodyTop = transform.TransformPoint(
-            new Vector3(bodyBounds.center.x, bodyBounds.max.y, bodyBounds.center.z));
+            new Vector3(bodyBounds.center.x,
+                Mathf.Lerp(bodyBounds.min.y, bodyBounds.max.y, revealProgress), bodyBounds.center.z));
         Vector3 upBottomOffset = up.transform.TransformVector(
             new Vector3(upBounds.center.x, upBounds.min.y, upBounds.center.z));
         Vector3 targetPosition = bodyTop + transform.up * topOffset - upBottomOffset;
@@ -51,5 +82,6 @@ public class WaterBodyTopAnchor : MonoBehaviour
         up.color = upColor;
         up.sortingLayerID = body.sortingLayerID;
         up.sortingOrder = body.sortingOrder + 1;
+        up.enabled = revealProgress > 0f;
     }
 }
