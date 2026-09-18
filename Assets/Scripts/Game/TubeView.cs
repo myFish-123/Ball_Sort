@@ -320,16 +320,17 @@ public class TubeView : MonoBehaviour
         return end - startIndex;
     }
 
-    public void RefreshWaterColumns()
+    public void RefreshWaterColumns(int visibleCount = int.MaxValue)
     {
         if (completedVisualApplied)
         {
             return;
         }
 
-        for (int start = 0; start < runtimeBallViews.Count;)
+        int count = Mathf.Min(visibleCount, runtimeBallViews.Count);
+        for (int start = 0; start < count;)
         {
-            int length = GetWaterColumnLength(start);
+            int length = Mathf.Min(GetWaterColumnLength(start), count - start);
             for (int i = start; i < start + length; i++)
             {
                 BallView ball = runtimeBallViews[i];

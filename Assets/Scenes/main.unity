@@ -1224,11 +1224,19 @@ MonoBehaviour:
   - tubeView: {fileID: 974081974}
     columns:
     - color: 3
-      length: 6
+      length: 2
+    - color: 3
+      length: 2
+    - color: 3
+      length: 2
     - color: 4
       length: 2
     - color: 3
-      length: 6
+      length: 2
+    - color: 3
+      length: 2
+    - color: 3
+      length: 2
     - color: 4
       length: 2
   - tubeView: {fileID: 607252730}
@@ -1286,7 +1294,7 @@ MonoBehaviour:
   introDropSfxBallInterval: 1
   introDropSfxMinInterval: 0.06
   selectionLiftHeight: -1
-  selectionTopBallMouthOffset: -1.1
+  selectionTopBallMouthOffset: -0.9
   selectionTweenDuration: 0.15
   selectionSortingBoost: 100
   raiseDuration: 0.2
@@ -1294,6 +1302,7 @@ MonoBehaviour:
   transferArcHeight: 0.7
   travelDuration: 0.25
   dropDuration: 0.3
+  followInterval: 0.12
   onPuzzleSolved:
     m_PersistentCalls:
       m_Calls: []

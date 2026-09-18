@@ -57,10 +57,10 @@ public class GameController : MonoBehaviour
         public TubeView targetView;
         public MoveEvaluation move;
         public List<BallView> movedBalls;
-        public List<BallView> overflowBalls;
         public int targetStartCount;
         public bool targetCompletedByMove;
         public bool puzzleSolvedByMove;
+        public bool animationFinished;
     }
 
     private sealed class IntroDropState
@@ -138,6 +138,10 @@ public class GameController : MonoBehaviour
     [SerializeField] private float travelDuration = 0.2f;
     [Tooltip("小球从目标管口落入目标槽位的动画时长。")]
     [SerializeField] private float dropDuration = 0.15f;
+
+    [Tooltip("前一段出发后，等待多少秒开始抬起下一段同色水柱；不等待前段落地，不改变动画速度。")]
+    [Min(0f)]
+    [SerializeField] private float followInterval = 0.12f;
 
     [Header("Events")]
     [Tooltip("全部目标长管完成且其余试管为空时触发。")]
@@ -544,6 +548,7 @@ public class GameController : MonoBehaviour
             return;
         }
 
+        if (IsTubeSelectionLocked(clickedView)) return;
         MoveEvaluation move = currentSelection.sourceModel.EvaluateMoveTo(clickedModel);
         if (move.IsValid)
         {
@@ -588,8 +593,9 @@ public class GameController : MonoBehaviour
 
         PlaySfxSafe("点击");
 
-        int selectedCount = selection.sourceModel.GetTopRunCount();
+        int selectedCount = Mathf.Min(TubeModel.TransferHeight, selection.sourceModel.GetTopRunCount());
         List<BallView> selectedBalls = selection.sourceView.GetTopBallViews(selectedCount);
+        selection.sourceView.RefreshWaterColumns(selection.sourceModel.Count - selectedCount);
         int topSlotIndex = selection.sourceModel.Count - 1;
         float resolvedLiftHeight = ResolveSelectionLiftHeight(selection.sourceView, topSlotIndex);
         Vector3 startPosition = selection.sourceView.GetSlotWorldPosition(topSlotIndex - selectedCount + 1);
@@ -689,7 +695,7 @@ public class GameController : MonoBehaviour
             yield break;
         }
 
-        int selectedCount = selection.sourceModel.GetTopRunCount();
+        int selectedCount = Mathf.Min(TubeModel.TransferHeight, selection.sourceModel.GetTopRunCount());
         List<BallView> selectedBalls = selection.sourceView.GetTopBallViews(selectedCount);
         Sequence sequence = DOTween.Sequence().SetTarget(selection.sourceView)
             .SetLink(selection.sourceView.gameObject);
@@ -747,17 +753,6 @@ public class GameController : MonoBehaviour
             movingColumn.SetSortingOrder(preparedMove.targetView.GetBallSortingOrder(targetBottomSlot));
         });
 
-        if (preparedMove.overflowBalls.Count > 0)
-        {
-            BallView returningColumn = preparedMove.overflowBalls[0];
-            returningColumn.SnapTo(liftedPosition);
-            returningColumn.BeginLiftVisual();
-            int sourceBottomSlot = preparedMove.sourceView.RuntimeBallViews.Count
-                - preparedMove.overflowBalls.Count;
-            batchSequence.Insert(0f, CreateColumnReturnSequence(
-                preparedMove.sourceView, preparedMove.overflowBalls, sourceBottomSlot));
-        }
-
         if (batchSequence.IsActive())
         {
             yield return batchSequence.WaitForCompletion();
@@ -789,26 +784,13 @@ public class GameController : MonoBehaviour
             sourceView = selection.sourceView,
             targetView = targetView,
             move = move,
-            movedBalls = new List<BallView>(move.TransferCount),
-            overflowBalls = new List<BallView>(move.OverflowCount)
+            movedBalls = selection.sourceView.GetTopBallViews(move.TransferCount)
         };
-
-        List<BallView> selectedBalls = selection.sourceView.GetTopBallViews(move.SelectedCount);
-        for (int i = 0; i < selectedBalls.Count; i++)
-        {
-            if (i < move.TransferCount)
-            {
-                preparedMove.movedBalls.Add(selectedBalls[i]);
-            }
-            else
-            {
-                preparedMove.overflowBalls.Add(selectedBalls[i]);
-            }
-        }
 
         preparedMove.targetStartCount = targetView.RuntimeBallViews.Count;
 
         selection.sourceView.RemoveRuntimeBalls(preparedMove.movedBalls);
+        selection.sourceView.RefreshWaterColumns();
         targetView.AddRuntimeBalls(preparedMove.movedBalls, false);
 
         selection.sourceModel.RemoveTop(move.TransferCount);
@@ -977,17 +959,60 @@ public class GameController : MonoBehaviour
 
     private IEnumerator RunMoveTransition(PreparedMoveState preparedMove)
     {
+        TubeView source = preparedMove.sourceView;
+        TubeView target = preparedMove.targetView;
+        BallColorType color = preparedMove.move.Color;
+        AddPendingOutgoing(source);
+        AddPendingIncoming(target);
+        List<PreparedMoveState> launchedMoves = new List<PreparedMoveState>();
         try
         {
-            yield return ExecuteMoveRoutine(preparedMove);
+            PreparedMoveState next = preparedMove;
+            while (true)
+            {
+                launchedMoves.Add(next);
+                StartCoroutine(RunMovingColumn(next));
+
+                TubeModel sourceModel = tubeModels[source];
+                TubeModel targetModel = tubeModels[target];
+                if (sourceModel.IsEmpty || sourceModel.TopColor != color) break;
+                MoveEvaluation nextMove = sourceModel.EvaluateMoveTo(targetModel);
+                if (!nextMove.IsValid) break;
+
+                // Launch the next segment while earlier segments are still in flight.
+                if (followInterval > 0f) yield return new WaitForSeconds(followInterval);
+                SelectionState following = CreateSelection(source, sourceModel);
+                yield return PlaySelectTubeRoutine(following);
+                next = PrepareMove(following, target, targetModel, nextMove);
+            }
+
+            foreach (PreparedMoveState launched in launchedMoves)
+                while (!launched.animationFinished) yield return null;
         }
         finally
         {
-            RemovePendingOutgoing(preparedMove.sourceView);
-            RemovePendingIncoming(preparedMove.targetView);
+            RemovePendingOutgoing(source);
+            RemovePendingIncoming(target);
         }
-        RefreshTubeColumnsIfIdle(preparedMove.sourceView);
-        RefreshTubeColumnsIfIdle(preparedMove.targetView);
+        RefreshTubeColumnsIfIdle(source);
+        RefreshTubeColumnsIfIdle(target);
+    }
+
+    private IEnumerator RunMovingColumn(PreparedMoveState move)
+    {
+        try
+        {
+            yield return ExecuteMoveRoutine(move);
+        }
+        finally
+        {
+            move.animationFinished = true;
+            RemovePendingOutgoing(move.sourceView);
+            RemovePendingIncoming(move.targetView);
+        }
+        // Do not regroup a target that still has incoming segments.
+        RefreshTubeColumnsIfIdle(move.sourceView);
+        RefreshTubeColumnsIfIdle(move.targetView);
     }
 
     private void StartTubeTransition(TubeView tubeView, IEnumerator routine)

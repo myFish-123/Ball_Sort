@@ -1,3 +1,63 @@
+## 2026-09-18 跟随改为间隔出发、允许同时在途
+
+**原因**
+用户要求调整后段开始跟随的间隔，而不是加快后段速度或等待前段落位。
+
+**修改**
+- 移除 Follow Speed Multiplier，新增 Follow Interval，默认 0.12 秒：前段出发后到下一段开始抬起的等待时间。
+- 各段移动协程独立运行，后段无需等待前段落位；抬起、飞行、下落及展开保持原有速度。
+- 逐段预占目标容量，整个跟随过程保持双管锁定；全部在途段结束后才合并显示，避免中途重排或超容量。
+
+**主要文件**
+- `Assets/Scripts/Game/GameController.cs`
+
+**Unity 编辑器操作**
+刷新后在 GameController → Move Animation → Follow Interval 调整。
+
+**注意**
+Unity 引用程序集编译通过；尚未实际游玩或重新打 Luna 包验证并发动画。未提交 Git。
+
+## 2026-09-18 配置同色水柱跟随速度
+
+**原因**
+用户希望后续水柱跟随更快，并能够配置节奏。
+
+**修改**
+- GameController 的 Move Animation 新增 Follow Speed Multiplier，默认 1.5。
+- 仅后续同色水柱的抬起、移动、下落和展开使用该倍率，首段保持原速；继续逐段落位后跟随。
+- 使用 DOTween Sequence.timeScale 统一加速，临近落点换色回调随动画同步。
+
+**主要文件**
+- `Assets/Scripts/Game/GameController.cs`
+
+**Unity 编辑器操作**
+刷新后在 GameController → Move Animation → Follow Speed Multiplier 调整，1 为原速，2 为两倍速。
+
+**注意**
+未提交 Git。
+
+## 2026-09-18 单段抬起及同色水柱依次跟随
+
+**原因**
+同色合并水柱需要只抬起顶部高度 2，并在目标空间允许时让下方同色段跟随；水滴特效需要缩小。
+
+**修改**
+- 每次选中和转移最多高度 2，下方同色部分保持显示；每段落位后再抬起下一段，同色且目标能容纳整段才继续。
+- 整个跟随过程锁定源管和目标管，逐段更新模型和显示；删除整组溢出返回分支，保留取消选中放回及临近落点换色。
+- 通过 Unity 原生预制体 API 将 water-up、water-down 的 localScale 设置为 (0.6, 0.6, 0.6)。
+
+**主要文件**
+- `Assets/Scripts/Game/TubeModel.cs`
+- `Assets/Scripts/Game/TubeView.cs`
+- `Assets/Scripts/Game/GameController.cs`
+- `Assets/prefabs/Water/body.prefab`
+
+**Unity 编辑器操作**
+预制体缩放已由 Unity 保存并复查，一次性脚本已移除。重新运行游戏。
+
+**注意**
+C# 编译通过；模型验证 6→2+2+2、只剩 2 空间时源管保留 4、不同颜色停止跟随、空间不足整段不转移。尚未完整游玩或 Luna 构建验证新动画。未提交 Git。
+
 ## 2026-09-18 修复 Luna 开场水流与 ShootRoot 退出
 
 **原因**

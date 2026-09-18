@@ -39,6 +39,7 @@ public readonly struct MoveEvaluation
 public class TubeModel
 {
     public const int MaximumHeight = 16;
+    public const int TransferHeight = 2;
     private readonly List<BallColorType> balls = new List<BallColorType>();
 
     public TubeModel(string tubeName, int capacity)
@@ -123,10 +124,10 @@ public class TubeModel
             return new MoveEvaluation(false, TopColor, GetTopRunCount(), 0, MoveFailureReason.TargetUnavailable);
         }
 
-        int selectedCount = GetTopRunCount();
+        int selectedCount = Mathf.Min(TransferHeight, GetTopRunCount());
         BallColorType selectedColor = TopColor;
 
-        if (target.IsFull)
+        if (target.RemainingCapacity < selectedCount)
         {
             return new MoveEvaluation(false, selectedColor, selectedCount, 0, MoveFailureReason.TargetFull);
         }
