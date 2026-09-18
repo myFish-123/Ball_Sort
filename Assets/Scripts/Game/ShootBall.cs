@@ -60,9 +60,14 @@ public class ShootBall : MonoBehaviour
         stream.useWorldSpace = true;
         stream.sharedMaterial = streamMaterial;
         stream.textureMode = LineTextureMode.Tile;
+        stream.widthCurve = AnimationCurve.Linear(0f, 1f, 1f, 1f);
         stream.widthMultiplier = streamWidth;
-        stream.startColor = streamColor;
-        stream.endColor = streamColor;
+        // Luna leaves a dynamically added LineRenderer's gradient uninitialized.
+        Gradient gradient = new Gradient();
+        gradient.SetKeys(
+            new[] { new GradientColorKey(streamColor, 0f), new GradientColorKey(streamColor, 1f) },
+            new[] { new GradientAlphaKey(streamColor.a, 0f), new GradientAlphaKey(streamColor.a, 1f) });
+        stream.colorGradient = gradient;
         stream.sortingOrder = sortingOrder;
         stream.numCapVertices = 4;
         stream.numCornerVertices = 4;
@@ -77,6 +82,8 @@ public class ShootBall : MonoBehaviour
         pathTween.ForceInit();
         sampledPath = pathTween.PathGetDrawPoints(12);
         pathTween.Kill();
+        // Path samples are world positions; keep the renderer origin at world zero for Luna.
+        streamObject.transform.position = Vector3.zero;
 
         pathDistances = new float[sampledPath.Length];
         for (int i = 1; i < sampledPath.Length; i++)

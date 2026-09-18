@@ -217,7 +217,7 @@ public class BallView : MonoBehaviour
     {
         get
         {
-            Bounds bounds = bodyRenderer.localBounds;
+            Bounds bounds = WaterBodyTopAnchor.GetLocalSpriteBounds(bodyRenderer);
             return bodyRenderer.transform.TransformPoint(
                 new Vector3(bounds.center.x, bounds.min.y, bounds.center.z)) + bodyRenderer.transform.up * BottomOverlapWorld - transform.position;
         }

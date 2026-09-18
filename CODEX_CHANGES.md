@@ -1,3 +1,42 @@
+## 2026-09-18 修复 Luna 开场水流与 ShootRoot 退出
+
+**原因**
+在实际 Luna 浏览器包中复现：动态创建的 LineRenderer 颜色渐变为空，设置 startColor 抛出 setKey 空引用，Start 中断导致 ShootRoot 上移未执行。宽度曲线也为空；初始化后另发现世界坐标点叠加了绘制对象的位置偏移。
+
+**修改**
+- ShootBall 显式初始化颜色渐变和恒定宽度曲线。
+- 保留原 DOPath 采样，采样完成后将 LineRenderer 原点归零，避免 Luna 中水流路径整体偏移。
+- 保留发射时长、轨迹、退出动画和关卡入场配置。
+
+**主要文件**
+- `Assets/Scripts/Game/ShootBall.cs`
+
+**Unity 编辑器操作**
+刷新脚本后重新打 Luna 包。
+
+**注意**
+Unity 引用程序集编译通过；在本地 Luna 已构建包内临时加入等价 JS 修复，实际观察到连续水流贴合路径、ShootRoot 退出和关卡入场，修复运行无新增异常。诊断时曾临时延长发射时间，源配置未变；诊断 JS 已恢复，仍需重新构建正式包。未提交 Git。
+
+## 2026-09-18 修复 Luna 不支持 SpriteRenderer.localBounds
+
+**原因**
+Luna 编译环境未提供 SpriteRenderer.localBounds，导致 CS1061，普通 Unity 编译无法发现此兼容性差异。
+
+**修改**
+- 移除 BallView 和 WaterBodyTopAnchor 内全部四处 localBounds 使用。
+- 统一以 Sprite.bounds 计算局部边界；Sliced/Tiled 模式结合 SpriteRenderer.size 缩放边界并保留支点，兼容水平/垂直翻转。
+- Body 底部定位、Up 对齐和裁剪面继续使用相同边界计算。
+
+**主要文件**
+- `Assets/Scripts/Game/BallView.cs`
+- `Assets/Scripts/Game/WaterBodyTopAnchor.cs`
+
+**Unity 编辑器操作**
+刷新后重新执行 Luna 构建。
+
+**注意**
+Unity 引用程序集编译通过；检查底部支点在高度 1/2/4/13/16 下保持不变，业务脚本无 localBounds 剩余引用。尚未实际完成 Luna 构建。未提交 Git。
+
 ## 2026-09-18 修正杯身、水柱和杯口渲染顺序
 
 **原因**

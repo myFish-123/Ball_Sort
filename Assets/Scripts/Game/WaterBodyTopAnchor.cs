@@ -51,8 +51,28 @@ public class WaterBodyTopAnchor : MonoBehaviour
         incomingColorSource = null;
     }
 
+    public static Bounds GetLocalSpriteBounds(SpriteRenderer renderer)
+    {
+        if (renderer.sprite == null) return new Bounds();
+        Bounds bounds = renderer.sprite.bounds;
+        if (renderer.drawMode != SpriteDrawMode.Simple)
+        {
+            // Sliced/Tiled sprites use renderer.size; keep the sprite's normalized pivot.
+            Vector2 size = renderer.size;
+            Vector3 center = bounds.center;
+            center.x *= size.x / bounds.size.x;
+            center.y *= size.y / bounds.size.y;
+            bounds = new Bounds(center, new Vector3(size.x, size.y, bounds.size.z));
+        }
+        Vector3 flippedCenter = bounds.center;
+        if (renderer.flipX) flippedCenter.x = -flippedCenter.x;
+        if (renderer.flipY) flippedCenter.y = -flippedCenter.y;
+        bounds.center = flippedCenter;
+        return bounds;
+    }
+
     public float CrossSectionHalfHeightWorld => up != null
-        ? up.transform.TransformVector(Vector3.up * up.localBounds.extents.y).magnitude
+        ? up.transform.TransformVector(Vector3.up * GetLocalSpriteBounds(up).extents.y).magnitude
         : 0f;
 
     // Extend beyond the lowered Up to cover differences between the two sprite curves.
@@ -60,7 +80,7 @@ public class WaterBodyTopAnchor : MonoBehaviour
 
     private Vector3 GetSurfaceWorldPosition()
     {
-        Bounds bounds = body.localBounds;
+        Bounds bounds = GetLocalSpriteBounds(body);
         float bottomOverlap = BottomOverlapWorld / Mathf.Abs(transform.lossyScale.y);
         return transform.TransformPoint(new Vector3(bounds.center.x,
             Mathf.Lerp(bounds.min.y + bottomOverlap, bounds.max.y, revealProgress), bounds.center.z));
@@ -108,7 +128,7 @@ public class WaterBodyTopAnchor : MonoBehaviour
             return;
         }
 
-        Vector3 upCenterOffset = up.transform.TransformVector(up.localBounds.center);
+        Vector3 upCenterOffset = up.transform.TransformVector(GetLocalSpriteBounds(up).center);
         Vector3 targetPosition = GetSurfaceWorldPosition() + transform.up * upVerticalOffset - upCenterOffset;
 
         if (up.transform.position != targetPosition)
